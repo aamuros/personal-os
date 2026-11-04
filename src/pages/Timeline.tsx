@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
-import { ArrowRight, Plus } from 'lucide-react'
-import { Card, Dialog, Empty, Field, PageHeader, RemoveButton, Segmented, cx, ic } from '../components/ui'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { X } from 'lucide-react'
+import { Dialog, PageHeader } from '../components/ui'
 import { TimelineWheel } from '../components/TimelineWheel'
-import { formatDate, shortDate, untilPhrase } from '../lib/date'
+import { daysBetween, formatDate, fromKey, toKey } from '../lib/date'
 import { useToday } from '../lib/hooks'
 import { clearParam, useLocation } from '../lib/router'
 import { actions, useStore } from '../lib/store'
 import type { EventKind, LifeEvent } from '../lib/types'
+import './timeline.css'
 
 const KINDS: Array<{ value: EventKind; label: string; plural: string }> = [
   { value: 'milestone', label: 'Milestone', plural: 'Milestones' },
@@ -15,239 +16,234 @@ const KINDS: Array<{ value: EventKind; label: string; plural: string }> = [
 ]
 const kindLabel = (kind: EventKind) => KINDS.find((k) => k.value === kind)?.label ?? kind
 
+function eventAge(date: string, birthDate: string) {
+  return Number(date.slice(0, 4)) - Number(birthDate.slice(0, 4)) - (date.slice(5) < birthDate.slice(5) ? 1 : 0)
+}
+
+function eventRelative(date: string, today: string) {
+  const days = daysBetween(today, date)
+  if (days === 0) return 'Today'
+  if (days === 1) return 'Tomorrow'
+  if (days < 14) return `in ${days} days`
+  if (days < 70) return `in ${Math.round(days / 7)} weeks`
+  return `in ${Math.round(days / 30.44)} months`
+}
+
 export default function Timeline() {
   const today = useToday()
   const { param } = useLocation()
   const events = useStore((s) => s.events)
   const profile = useStore((s) => s.profile)
-  const birthYear = Number(profile.birthDate.slice(0, 4))
   const [tab, setTab] = useState<'events' | 'wheel'>('events')
   const [filter, setFilter] = useState<EventKind | 'all'>('all')
+  const [view, setView] = useState<'upcoming' | 'past'>('upcoming')
   const [adding, setAdding] = useState(false)
+  const [removed, setRemoved] = useState<LifeEvent | null>(null)
 
   useEffect(() => {
     if (param === 'new') setAdding(true)
     if (param) clearParam('timeline')
   }, [param])
 
-  const filtered = useMemo(() => events.filter((e) => filter === 'all' || e.kind === filter), [events, filter])
-  const upcoming = filtered.filter((e) => e.date > today).sort((a, b) => a.date.localeCompare(b.date))
-  const years = useMemo(() => {
-    const past = filtered.filter((e) => e.date <= today).sort((a, b) => b.date.localeCompare(a.date))
-    const groups = new Map<string, LifeEvent[]>()
-    for (const e of past) {
-      const year = e.date.slice(0, 4)
-      groups.set(year, [...(groups.get(year) ?? []), e])
-    }
-    return [...groups.entries()]
-  }, [filtered, today])
+  useEffect(() => {
+    if (!removed) return
+    const timer = window.setTimeout(() => setRemoved(null), 6000)
+    return () => window.clearTimeout(timer)
+  }, [removed])
 
+  const filtered = useMemo(() => events.filter((e) => filter === 'all' || e.kind === filter), [events, filter])
+  const upcoming = filtered.filter((e) => e.date >= today).sort((a, b) => a.date.localeCompare(b.date))
+  const past = filtered.filter((e) => e.date < today).sort((a, b) => b.date.localeCompare(a.date))
   const counts = Object.fromEntries(KINDS.map((k) => [k.value, events.filter((e) => e.kind === k.value).length]))
-  const month = today.slice(5, 7)
-  const thisMonth = events
-    .filter((e) => e.date.slice(5, 7) === month && e.date.slice(0, 4) < today.slice(0, 4))
-    .sort((a, b) => b.date.localeCompare(a.date))
+
+  function removeEvent(event: LifeEvent) {
+    actions.removeEvent(event.id)
+    setRemoved(event)
+  }
+
+  function showEvent(event: Omit<LifeEvent, 'id'>) {
+    setFilter('all')
+    setView(event.date >= today ? 'upcoming' : 'past')
+  }
+
+  const renderEvents = (list: LifeEvent[]) => (
+    <EventList events={list} today={today} birthDate={profile.birthDate} onRemove={removeEvent} />
+  )
 
   return (
-    <>
+    <div className="timeline-page" data-view={view}>
       <PageHeader
+        eyebrow="Reflect"
         title="Timeline"
         subtitle="The moments, milestones, and achievements that shaped your story."
-        actions={
-          <button type="button" className="btn btn-primary" onClick={() => setAdding(true)}>
-            <Plus {...ic} />
-            Add event
-          </button>
-        }
+        actions={<button type="button" className="timeline-button" onClick={() => setAdding(true)}>Add event</button>}
       />
 
-      <div className="timeline-tabs" role="tablist" aria-label="Timeline view"
-        onKeyDown={(e) => {
-          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return
-          e.preventDefault()
-          const next = e.key === 'Home' ? 'events' : e.key === 'End' ? 'wheel' : tab === 'events' ? 'wheel' : 'events'
-          setTab(next)
-          e.currentTarget.querySelector<HTMLButtonElement>(`#timeline-tab-${next}`)?.focus()
-        }}>
-        {(['events', 'wheel'] as const).map((view) => (
-          <button key={view} type="button" role="tab" id={`timeline-tab-${view}`} aria-selected={tab === view}
-            aria-controls={`timeline-panel-${view}`} tabIndex={tab === view ? 0 : -1} onClick={() => setTab(view)}>
-            {view === 'events' ? 'Events' : 'Wheel'}
+      <div className="timeline-bar">
+        <div className="timeline-segment" role="tablist" aria-label="Timeline view"
+          onKeyDown={(e) => {
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return
+            e.preventDefault()
+            const next = e.key === 'Home' ? 'events' : e.key === 'End' ? 'wheel' : tab === 'events' ? 'wheel' : 'events'
+            setTab(next)
+            e.currentTarget.querySelector<HTMLButtonElement>(`#timeline-tab-${next}`)?.focus()
+          }}>
+          {(['events', 'wheel'] as const).map((option) => (
+            <button key={option} type="button" role="tab" id={`timeline-tab-${option}`} aria-selected={tab === option}
+              aria-controls={`timeline-panel-${option}`} tabIndex={tab === option ? 0 : -1} onClick={() => setTab(option)}>
+              {option === 'events' ? 'Events' : 'Wheel'}
+            </button>
+          ))}
+        </div>
+        <div className="timeline-filters" role="group" aria-label="Filter events">
+          <button type="button" className="timeline-chip" aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>
+            All <span className="timeline-filter-count">{events.length}</span>
           </button>
-        ))}
-      </div>
-
-      <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="Filter events">
-        <button type="button" className="chip" aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>
-          All <span className="tabular-nums opacity-60">{events.length}</span>
-        </button>
-        {KINDS.map((k) => (
-          <button
-            key={k.value}
-            type="button"
-            className="chip"
-            aria-pressed={filter === k.value}
-            onClick={() => setFilter(k.value)}
-          >
-            <span className="tl-dot" data-kind={k.value} aria-hidden />
-            {k.plural} <span className="tabular-nums opacity-60">{counts[k.value]}</span>
-          </button>
-        ))}
-      </div>
-
-      <div role="tabpanel" id="timeline-panel-wheel" aria-labelledby="timeline-tab-wheel" hidden={tab !== 'wheel'}>
-        {tab === 'wheel' && <TimelineWheel profile={profile} today={today} events={filtered}
-          renderEvents={(list) => <EventList events={list} today={today} />} />}
+          {KINDS.map((kind) => (
+            <button key={kind.value} type="button" className="timeline-chip" aria-pressed={filter === kind.value} onClick={() => setFilter(kind.value)}>
+              <i className="timeline-dot" data-kind={kind.value} aria-hidden="true" />
+              {kind.plural} <span className="timeline-filter-count">{counts[kind.value]}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       <div role="tabpanel" id="timeline-panel-events" aria-labelledby="timeline-tab-events" hidden={tab !== 'events'}>
-        <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,728fr)_minmax(0,368fr)]">
-          <div className="flex min-w-0 flex-col gap-4">
-            {upcoming.length > 0 && (
-              <Card title="Upcoming">
-                <EventList events={upcoming} today={today} />
-              </Card>
-            )}
-            <section className="card" aria-label="Past events">
-              {years.length === 0 ? (
-                <Empty>No events here yet. Add a memory, milestone, or achievement.</Empty>
-              ) : (
-                years.map(([year, list], i) => (
-                  <div key={year} className={cx(i > 0 && 'mt-6')}>
-                    <div className="mb-1 flex items-baseline gap-2">
-                      <h2 className="text-title font-medium tabular-nums">{year}</h2>
-                      <span className="text-caption text-muted">Age {Number(year) - birthYear}</span>
-                    </div>
-                    <EventList events={list} today={today} />
-                  </div>
-                ))
-              )}
-            </section>
-          </div>
-
-          <div className="grid min-w-0 items-start gap-4 md:grid-cols-2 xl:grid-cols-1">
-            <Card title={`${formatDate(today, { month: 'long' })} in past years`}>
-              {thisMonth.length === 0 ? (
-                <Empty>Nothing recorded for this month yet.</Empty>
-              ) : (
-                <ul className="-mt-1 flex flex-col gap-3">
-                  {thisMonth.slice(0, 4).map((e) => (
-                    <li key={e.id} className="flex items-start gap-3">
-                      <span className="tl-dot m-0 mt-1.5 shadow-none" data-kind={e.kind} aria-hidden />
-                      <div className="min-w-0">
-                        <p className="text-label text-secondary">{e.title}</p>
-                        <p className="text-caption text-muted">
-                          {Number(today.slice(0, 4)) - Number(e.date.slice(0, 4))} years ago · {e.date.slice(0, 4)}
-                        </p>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Card>
-            <Card title="At a glance">
-              <ul className="-mt-1 flex flex-col gap-2.5">
-                {KINDS.map((k) => (
-                  <li key={k.value} className="flex items-center gap-2.5 text-label">
-                    <span className="tl-dot m-0 shadow-none" data-kind={k.value} aria-hidden />
-                    <span className="flex-1 text-secondary">{k.plural}</span>
-                    <span className="tabular-nums text-muted">{counts[k.value]}</span>
-                  </li>
-                ))}
-              </ul>
-              <div className="divider my-4" />
-              <a href="#life-calendar" className="card-link">
-                See them on your life calendar
-                <ArrowRight size={12} strokeWidth={1.75} />
-              </a>
-            </Card>
-          </div>
+        <div className="timeline-segment timeline-switch" role="group" aria-label="Show events">
+          {(['upcoming', 'past'] as const).map((option) => (
+            <button key={option} type="button" aria-pressed={view === option} onClick={() => setView(option)}>
+              {option === 'upcoming' ? 'Upcoming' : 'Past'}
+            </button>
+          ))}
         </div>
-
+        <div className="timeline-columns">
+          {(['upcoming', 'past'] as const).map((column) => {
+            const list = column === 'upcoming' ? upcoming : past
+            return (
+              <section key={column} className="timeline-slab" data-column={column} aria-labelledby={`timeline-${column}-heading`}>
+                <div className="timeline-heading">
+                  <h2 id={`timeline-${column}-heading`}>{column === 'upcoming' ? 'Upcoming' : 'Past'}</h2>
+                  <span className="timeline-count"><RollingCount value={list.length} /> {list.length === 1 ? 'event' : 'events'}</span>
+                </div>
+                {list.length ? renderEvents(list) : <p className="timeline-empty">{events.length ? 'Nothing here yet.' : 'No events yet. Add your first one.'}</p>}
+              </section>
+            )
+          })}
+        </div>
       </div>
 
-      <Dialog open={adding} onClose={() => setAdding(false)} title="Add event" description="Record a moment worth remembering.">
-        <AddEventForm today={today} onDone={() => setAdding(false)} />
+      <div role="tabpanel" id="timeline-panel-wheel" aria-labelledby="timeline-tab-wheel" hidden={tab !== 'wheel'}>
+        {tab === 'wheel' && <TimelineWheel profile={profile} today={today} events={filtered} renderEvents={renderEvents} />}
+      </div>
+
+      {removed && <div className="timeline-toast" role="status" aria-live="polite">
+        <span>Removed “{removed.title}”</span>
+        <button type="button" className="timeline-button timeline-secondary timeline-small" onClick={() => {
+          const { id: _id, ...event } = removed
+          actions.addEvent(event)
+          showEvent(event)
+          setRemoved(null)
+        }}>Undo</button>
+      </div>}
+
+      <Dialog open={adding} onClose={() => setAdding(false)} title="Add event" className="timeline-dialog">
+        <AddEventForm today={today} onCancel={() => setAdding(false)} onDone={(event) => {
+          actions.addEvent(event)
+          showEvent(event)
+          setTab('events')
+          setAdding(false)
+        }} />
       </Dialog>
-    </>
+    </div>
   )
 }
 
-function EventList({ events, today }: { events: LifeEvent[]; today: string }) {
-  return (
-    <ol>
-      {events.map((e) => (
-        <li key={e.id} className="tl-item reveal">
-          <time className="pt-0.5 text-caption tabular-nums text-muted" dateTime={e.date}>
-            {shortDate(e.date)}
-          </time>
-          <span className="tl-rail" aria-hidden>
-            <span className="tl-dot" data-kind={e.kind} />
-          </span>
-          <div className="min-w-0">
-            <p className="text-body font-medium">{e.title}</p>
-            {e.note && <p className="mt-0.5 text-label text-muted">{e.note}</p>}
-            <p className="mt-1 text-caption text-faint">
-              {kindLabel(e.kind)}
-              {e.date > today && ` · ${untilPhrase(e.date, today)}`}
-            </p>
-          </div>
-          <RemoveButton label={`Remove ${e.title}`} onClick={() => actions.removeEvent(e.id)} className="-my-1" />
-        </li>
-      ))}
-    </ol>
-  )
+function RollingCount({ value }: { value: number }) {
+  const [ready, setReady] = useState(false)
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setReady(true))
+    return () => cancelAnimationFrame(frame)
+  }, [])
+  return <span className="timeline-roll" role="img" aria-label={String(value)}>
+    {Array.from(String(value), (digit, index) => <span key={index} className="timeline-digit" aria-hidden="true">
+      <span className="timeline-digits" style={{ transform: `translateY(calc(var(--timeline-digit-height) * -${ready ? Number(digit) : 0}))`, transitionDelay: `${index * 70}ms` }}>
+        {Array.from('0123456789', (number) => <b key={number}>{number}</b>)}
+      </span>
+    </span>)}
+  </span>
 }
 
-function AddEventForm({ today, onDone }: { today: string; onDone: () => void }) {
+function EventList({ events, today, birthDate, onRemove }: {
+  events: LifeEvent[]; today: string; birthDate: string; onRemove: (event: LifeEvent) => void
+}) {
+  return <ul className="timeline-list">
+    {events.map((event) => <EventRow key={event.id} event={event} today={today} birthDate={birthDate} onRemove={onRemove} />)}
+  </ul>
+}
+
+function EventRow({ event, today, birthDate, onRemove }: {
+  event: LifeEvent; today: string; birthDate: string; onRemove: (event: LifeEvent) => void
+}) {
+  const [removing, setRemoving] = useState(false)
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  useEffect(() => () => clearTimeout(timer.current), [])
+  const upcoming = event.date >= today
+  const age = eventAge(event.date, birthDate)
+  return <li className="timeline-item" data-removing={removing || undefined}>
+    <div><div className="timeline-row">
+      <div className="timeline-event-copy">
+        <p className="timeline-event-title" title={event.title}>{event.title}</p>
+        <p className="timeline-event-meta">
+          <span className="timeline-kind"><i className="timeline-dot" data-kind={event.kind} data-upcoming={upcoming || undefined} aria-hidden="true" />{kindLabel(event.kind)}</span>
+          {event.note && <span className="timeline-note" title={event.note}>{event.note}</span>}
+        </p>
+      </div>
+      <div className="timeline-event-date">
+        <time dateTime={event.date}>{formatDate(event.date, { month: 'short', day: 'numeric', year: 'numeric' })}</time>
+        <span>{upcoming ? eventRelative(event.date, today) : age >= 0 ? `Age ${age}` : ''}</span>
+      </div>
+      <button type="button" className="timeline-remove" aria-label={`Remove ${event.title}`} disabled={removing} onClick={() => {
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          onRemove(event)
+          return
+        }
+        setRemoving(true)
+        timer.current = setTimeout(() => onRemove(event), 340)
+      }}><X size={14} strokeWidth={1.5} aria-hidden="true" /></button>
+    </div></div>
+  </li>
+}
+
+function AddEventForm({ today, onCancel, onDone }: {
+  today: string; onCancel: () => void; onDone: (event: Omit<LifeEvent, 'id'>) => void
+}) {
   const [title, setTitle] = useState('')
   const [date, setDate] = useState(today)
-  const [kind, setKind] = useState<EventKind>('memory')
+  const [kind, setKind] = useState<EventKind>('milestone')
   const [note, setNote] = useState('')
-
-  return (
-    <form
-      className="flex flex-col gap-5"
-      onSubmit={(e) => {
-        e.preventDefault()
-        if (!title.trim() || !date) return
-        actions.addEvent({ title: title.trim(), date, kind, note: note.trim() || undefined })
-        onDone()
-      }}
-    >
-      <Field label="What happened?">
-        <input
-          autoFocus
-          className="input"
-          maxLength={80}
-          placeholder="Moved to a new city"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-        />
-      </Field>
-      <div className="grid gap-5 sm:grid-cols-[minmax(0,1fr)_auto]">
-        <Field label="Date">
-          <input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} />
-        </Field>
-        <Field label="Type" group>
-          <div>
-            <Segmented label="Type" value={kind} onChange={setKind} options={KINDS.map((k) => ({ value: k.value, label: k.label }))} />
-          </div>
-        </Field>
-      </div>
-      <Field label="Note" optional>
-        <textarea
-          className="input"
-          rows={2}
-          maxLength={200}
-          placeholder="A detail you want to remember"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-        />
-      </Field>
-      <button type="submit" className="btn btn-primary mt-1 w-full" disabled={!title.trim() || !date}>
-        Add to timeline
-      </button>
-    </form>
-  )
+  const [error, setError] = useState('')
+  return <form className="timeline-form" noValidate onSubmit={(e) => {
+    e.preventDefault()
+    if (!title.trim()) {
+      setError('Add a title for the event.')
+      return
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date < '1900-01-01' || date > '2100-12-31' || toKey(fromKey(date)) !== date) {
+      setError('Pick a date between 1900 and 2100.')
+      return
+    }
+    onDone({ title: title.trim(), date, kind, note: note.trim() || undefined })
+  }}>
+    <label>Title<input autoFocus className="timeline-input" maxLength={60} autoComplete="off" value={title} onChange={(e) => setTitle(e.target.value)} /></label>
+    <label>Date<input type="date" className="timeline-input" min="1900-01-01" max="2100-12-31" value={date} onChange={(e) => setDate(e.target.value)} /></label>
+    <fieldset><legend>Kind</legend><div className="timeline-form-kinds">
+      {KINDS.map((option) => <button key={option.value} type="button" className="timeline-chip" aria-pressed={kind === option.value} onClick={() => setKind(option.value)}>{option.label}</button>)}
+    </div></fieldset>
+    <label>Note (optional)<input className="timeline-input" maxLength={90} autoComplete="off" value={note} onChange={(e) => setNote(e.target.value)} /></label>
+    <p className="timeline-error" role="alert">{error}</p>
+    <div className="timeline-dialog-actions">
+      <button type="button" className="timeline-button timeline-secondary" onClick={onCancel}>Cancel</button>
+      <button type="submit" className="timeline-button">Add event</button>
+    </div>
+  </form>
 }

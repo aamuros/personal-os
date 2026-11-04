@@ -12,7 +12,7 @@ import type {
 } from './types'
 
 const STORAGE_KEY = 'lifeos:v1'
-const PROFILE_SETUP_KEY = 'lifeos:profile-setup:1978-07-17'
+const PROFILE_SETUP_KEY = 'lifeos:profile-setup:2006-03-03'
 
 function load(): State {
   try {
@@ -23,10 +23,10 @@ function load(): State {
         // Apply the requested profile once, including to an existing saved dashboard.
         // Later edits in the life calendar remain editable and persist normally.
         if (!localStorage.getItem(PROFILE_SETUP_KEY)) {
-          parsed.profile = { ...parsed.profile, birthDate: '1978-07-17' }
+          parsed.profile = { ...parsed.profile, birthDate: '2006-03-03' }
           parsed.events = parsed.events.map((event) =>
-            event.id === 'e-1' && event.title === 'Born' && event.date === '2006-03-03'
-              ? { ...event, date: '1978-07-17' }
+            event.id === 'e-1' && event.title === 'Born' && event.date === '1978-07-17'
+              ? { ...event, date: '2006-03-03' }
               : event,
           )
           try {

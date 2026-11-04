@@ -15,8 +15,8 @@ function createRandom(seed: number) {
 export function createSeed(today: string): State {
   const random = createRandom(20261103)
   const year = Number(today.slice(0, 4))
-  const birthYear = 1978
-  const birthDate = '1978-07-17'
+  const birthYear = 2006
+  const birthDate = '2006-03-03'
   const atAge = (age: number, monthDay: string) => `${birthYear + age}-${monthDay}`
   const ago = (days: number) => addDays(today, -days)
   const ahead = (days: number) => addDays(today, days)
