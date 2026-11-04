@@ -12,18 +12,44 @@ import type {
 } from './types'
 
 const STORAGE_KEY = 'lifeos:v1'
+const PROFILE_SETUP_KEY = 'lifeos:profile-setup:1978-07-17'
 
 function load(): State {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
       const parsed = JSON.parse(raw) as State
-      if (parsed?.version === 1) return parsed
+      if (parsed?.version === 1) {
+        // Apply the requested profile once, including to an existing saved dashboard.
+        // Later edits in the life calendar remain editable and persist normally.
+        if (!localStorage.getItem(PROFILE_SETUP_KEY)) {
+          parsed.profile = { ...parsed.profile, birthDate: '1978-07-17' }
+          parsed.events = parsed.events.map((event) =>
+            event.id === 'e-1' && event.title === 'Born' && event.date === '2006-03-03'
+              ? { ...event, date: '1978-07-17' }
+              : event,
+          )
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed))
+            localStorage.setItem(PROFILE_SETUP_KEY, '1')
+          } catch {
+            /* storage full — preserve the saved dashboard in memory */
+          }
+        }
+        return parsed
+      }
     }
   } catch {
     /* corrupted or unavailable storage — fall back to the seed */
   }
-  return createSeed(todayKey())
+  const initial = createSeed(todayKey())
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(initial))
+    localStorage.setItem(PROFILE_SETUP_KEY, '1')
+  } catch {
+    /* storage unavailable — keep the requested profile in memory */
+  }
+  return initial
 }
 
 let state: State = load()
@@ -214,6 +240,13 @@ export const actions = {
   },
   removeReflection(id: string) {
     set((s) => ({ reflections: s.reflections.filter((r) => r.id !== id) }))
+  },
+  toggleReflectionAdjustment(id: string) {
+    set((s) => ({
+      reflections: s.reflections.map((r) =>
+        r.id === id ? { ...r, adjustmentDone: !r.adjustmentDone } : r,
+      ),
+    }))
   },
 
   // Timeline

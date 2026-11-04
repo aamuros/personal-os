@@ -1,12 +1,14 @@
-import { useMemo, useState } from 'react'
-import { ArrowRight, Check as CheckIcon, ChevronRight, Flame, Plus, X } from 'lucide-react'
-import { Card, Check, Empty, InlineAdd, PageHeader, Progress, RemoveButton, StatusDot, cx, ic } from '../components/ui'
-import { addDays, daysBetween, formatDate, formatTime, longDate, monthYear, relativeDay, shortDate, untilPhrase } from '../lib/date'
-import { habitStreak, goalPace, goalProgress, lifeStats, plural } from '../lib/derive'
+import { useEffect, useMemo, useState } from 'react'
+import { ArrowRight, ChevronRight, Plus, X } from 'lucide-react'
+import { Card, Empty, InlineAdd, PageHeader, Progress, RemoveButton, cx, ic } from '../components/ui'
+import { LifeCountdown } from '../components/LifeCountdown'
+import { addDays, daysBetween, formatDate, formatTime, relativeDay, shortDate } from '../lib/date'
+import { habitStreak, goalPace, goalProgress, plural } from '../lib/derive'
 import { EXERCISE_BY_ID } from '../lib/exercises'
 import { useToday } from '../lib/hooks'
 import { actions, useStore } from '../lib/store'
 import type { Goal, Priority } from '../lib/types'
+import './dashboard.css'
 
 function greeting() {
   const hour = new Date().getHours()
@@ -37,21 +39,21 @@ export default function Dashboard() {
       : 'Everything for today is done. A good moment to reflect.'
 
   return (
-    <>
-      <PageHeader eyebrow={longDate(today)} title={`${greeting()}, ${name.split(' ')[0]}`} subtitle={subtitle} />
+    <div className="dashboard">
+      <PageHeader title={`${greeting()}, ${name.split(' ')[0]}`} subtitle={subtitle} />
+      <LifeCountdown />
 
-      <div className="grid items-start gap-4 sm:gap-6 xl:grid-cols-[minmax(0,728fr)_minmax(0,368fr)]">
-        <div className="flex min-w-0 flex-col gap-4 sm:gap-6">
+      <div className="dashboard-columns">
+        <div className="dashboard-column">
           <PrioritiesCard items={todays} today={today} />
           <HabitsCard today={today} />
         </div>
-        <div className="grid min-w-0 items-start gap-4 sm:gap-6 md:grid-cols-2 xl:grid-cols-1">
+        <div className="dashboard-column">
           <GoalsCard today={today} />
           <LoopCard today={today} />
-          <LifeCard today={today} />
         </div>
       </div>
-    </>
+    </div>
   )
 }
 
@@ -62,8 +64,8 @@ function PrioritiesCard({ items, today }: { items: Priority[]; today: string }) 
       title="Today’s priorities"
       aside={
         items.length > 0 && (
-          <span className="text-caption tabular-nums text-muted">
-            {done} of {items.length} done
+          <span className="dashboard-count">
+            <RollingNumber value={done} /> of <RollingNumber value={items.length} /> done
           </span>
         )
       }
@@ -72,14 +74,15 @@ function PrioritiesCard({ items, today }: { items: Priority[]; today: string }) 
         <ul className="flex flex-col gap-0.5">
           {items.map((p) => (
             <li key={p.id} className="row row-interactive">
-              <Check checked={p.done} onChange={() => actions.togglePriority(p.id)} label={p.title} />
+              <button type="button" className="dashboard-check" role="checkbox" aria-checked={p.done} aria-label={p.title} onClick={() => actions.togglePriority(p.id)}><Tick /></button>
               <span
                 className={cx(
-                  'min-w-0 flex-1 truncate text-body transition-colors duration-150',
-                  p.done && 'text-muted line-through decoration-faint',
+                  'dashboard-priority-text min-w-0 flex-1 truncate text-body',
+                  p.done && 'text-muted',
                 )}
+                data-done={p.done || undefined}
               >
-                {p.title}
+                <span>{p.title}</span>
               </span>
               {p.time && (
                 <time className={cx('text-caption tabular-nums', p.done ? 'text-faint' : 'text-tertiary')}>
@@ -119,7 +122,7 @@ function AddPriority({ today }: { today: string }) {
 
   return (
     <form
-      className="row mt-2 bg-wash"
+      className="dashboard-add-priority row mt-2 bg-wash"
       onKeyDown={(e) => e.key === 'Escape' && close()}
       onSubmit={(e) => {
         e.preventDefault()
@@ -166,8 +169,8 @@ function HabitsCard({ today }: { today: string }) {
       title="Habits"
       aside={
         habits.length > 0 && (
-          <span className="text-caption tabular-nums text-muted">
-            {doneToday} of {habits.length} today
+          <span className="dashboard-count">
+            <RollingNumber value={doneToday} /> of <RollingNumber value={habits.length} /> today
           </span>
         )
       }
@@ -187,14 +190,13 @@ function HabitsCard({ today }: { today: string }) {
         {habits.map((h) => {
           const streak = habitStreak(h, today)
           return (
-            <li key={h.id} className="row min-h-[54px] gap-4">
+            <li key={h.id} className="dashboard-habit-row row min-h-[54px] gap-4">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1">
                   <p className="truncate text-label font-medium">{h.name}</p>
                   <RemoveButton label={`Remove habit ${h.name}`} onClick={() => actions.removeHabit(h.id)} className="-my-1 size-6" />
                 </div>
                 <p className="flex items-center gap-1 text-caption text-muted">
-                  <Flame size={12} strokeWidth={1.75} aria-hidden />
                   {streak > 0 ? `${streak} day streak` : 'Start a streak today'}
                 </p>
               </div>
@@ -211,7 +213,7 @@ function HabitsCard({ today }: { today: string }) {
                       aria-label={`${h.name}, ${formatDate(d, { weekday: 'long' })}`}
                       onClick={() => actions.toggleHabit(h.id, d)}
                     >
-                      {on && <CheckIcon size={13} strokeWidth={2.75} />}
+                      <Tick />
                     </button>
                   )
                 })}
@@ -273,10 +275,10 @@ function GoalSummary({ goal, today }: { goal: Goal; today: string }) {
   const left = daysBetween(today, goal.due)
   const atRisk = pace === 'behind' || pace === 'overdue'
   return (
-    <a href={`#goals/${goal.id}`} className="row row-interactive flex-col items-stretch gap-2.5 py-3">
+    <a href={`#goals/${goal.id}`} className="dashboard-goal row row-interactive flex-col items-stretch gap-2.5 py-3">
       <span className="flex items-center justify-between gap-3 text-body font-medium">
-        <span className="truncate">{goal.title}</span>
-        <span className="text-label tabular-nums text-tertiary">{pct}%</span>
+        <span className="min-w-0 truncate">{goal.title}</span>
+        <span className="shrink-0 text-label tabular-nums text-tertiary">{pct}%</span>
       </span>
       <Progress value={pct / 100} tone={atRisk ? 'amber' : 'cyan'} label={goal.title} />
       <span className="text-caption text-tertiary">
@@ -344,12 +346,13 @@ function LoopCard({ today }: { today: string }) {
   const doneCount = steps.filter((s) => s.done).length
 
   return (
-    <Card title="Your loop" aside={<span className="text-caption tabular-nums text-muted">{doneCount} of 5</span>}>
+    <Card title="Your loop" aside={<span className="dashboard-count"><RollingNumber value={doneCount} /> of 5</span>}>
+      <Progress className="dashboard-loop-progress" value={doneCount / steps.length} label="Your loop completed" />
       <ol className="-mt-1 flex flex-col">
         {steps.map((step) => (
           <li key={step.stage}>
             <a href={step.href} className="group row row-interactive py-2">
-              <StatusDot done={step.done} />
+              <span className="dashboard-check dashboard-check-small" data-done={step.done || undefined} aria-hidden><Tick /></span>
               <span className="min-w-0 flex-1">
                 <span className={cx('block text-label font-medium', step.done ? 'text-fg' : 'text-secondary')}>
                   {step.stage}
@@ -370,51 +373,26 @@ function LoopCard({ today }: { today: string }) {
   )
 }
 
-function LifeCard({ today }: { today: string }) {
-  const profile = useStore((s) => s.profile)
-  const events = useStore((s) => s.events)
-  const stats = lifeStats(profile, today)
-  const next = useMemo(
-    () => events.filter((e) => e.date > today).sort((a, b) => a.date.localeCompare(b.date))[0],
-    [events, today],
-  )
+function Tick() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5" pathLength={1} /></svg>
+}
 
+function RollingNumber({ value }: { value: number }) {
+  const [ready, setReady] = useState(false)
+  useEffect(() => {
+    let frame = requestAnimationFrame(() => { frame = requestAnimationFrame(() => setReady(true)) })
+    return () => cancelAnimationFrame(frame)
+  }, [])
+  const text = value.toLocaleString('en-US')
   return (
-    <Card
-      title="Life"
-      aside={
-        <a href="#life-calendar" className="card-link">
-          Calendar
-          <ArrowRight size={12} strokeWidth={1.75} />
-        </a>
-      }
-    >
-      <a href="#life-calendar" className="group flex flex-col gap-2.5">
-        <span className="flex items-center justify-between gap-2 text-body font-medium">
-          <span className="transition-colors group-hover:text-cyan">Week {stats.weekNumber.toLocaleString()}</span>
-          <span className="text-label tabular-nums text-tertiary">{Math.round(stats.pct * 100)}% lived</span>
-        </span>
-        <Progress value={stats.pct} label="Life lived" />
-        <span className="text-caption text-tertiary">{stats.weeksLeft.toLocaleString()} weeks left</span>
-      </a>
-      <div className="divider my-4" />
-      <p className="text-caption text-muted">Next milestone</p>
-      {next ? (
-        <div className="mt-2 flex items-center gap-2.5 text-label">
-          <span className="size-2 shrink-0 rounded-full bg-amber" aria-hidden />
-          <span className="min-w-0 flex-1 truncate text-secondary">
-            {next.title} · {monthYear(next.date)}
+    <span className="dashboard-roll" aria-label={text}>
+      {Array.from(text, (character, index) => /\d/.test(character) ? (
+        <span className="dashboard-roll-window" key={`${text.length}-${index}`} aria-hidden>
+          <span className="dashboard-roll-strip" style={{ transform: `translateY(-${ready ? Number(character) * 1.35 : 0}em)`, transitionDelay: `${index * 70}ms` }}>
+            {Array.from('0123456789', (digit) => <span key={digit}>{digit}</span>)}
           </span>
-          <span className="shrink-0 text-caption text-muted">{untilPhrase(next.date, today)}</span>
-        </div>
-      ) : (
-        <p className="mt-2 text-label text-secondary">
-          Nothing planned —{' '}
-          <a href="#timeline/new" className="underline decoration-faint underline-offset-4 hover:text-fg">
-            add one
-          </a>
-        </p>
-      )}
-    </Card>
+        </span>
+      ) : <span key={`${text.length}-${index}`} aria-hidden>{character}</span>)}
+    </span>
   )
 }

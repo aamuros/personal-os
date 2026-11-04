@@ -1,12 +1,27 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Check as CheckIcon, Minus, Plus, RotateCcw, Trash2 } from 'lucide-react'
-import { Card, Check, Dialog, Empty, Field, InlineAdd, PageHeader, Progress, RemoveButton, Segmented, cx, ic } from '../components/ui'
+import { Minus, Plus } from 'lucide-react'
+import { Dialog, Field, PageHeader, Segmented } from '../components/ui'
 import { addDays, daysBetween, shortDate } from '../lib/date'
 import { goalPace, goalProgress, paceLabel, plural } from '../lib/derive'
 import { useToday } from '../lib/hooks'
 import { clearParam, useLocation } from '../lib/router'
 import { actions, useStore } from '../lib/store'
 import type { Goal, GoalStatus, Value } from '../lib/types'
+import './goals.css'
+
+const VALUE_COLORS: Record<string, string> = { Craft: '#3d7be0', Curiosity: '#a86bd6', Health: '#e0707a' }
+const clamp = (value: number) => Math.max(0, Math.min(1, value))
+
+function expectedProgress(goal: Goal, today: string) {
+  if (goal.status === 'completed') return 1
+  const duration = daysBetween(goal.start, goal.due)
+  return duration > 0 ? clamp(daysBetween(goal.start, today) / duration) : 1
+}
+
+function GuidedValue({ name, detail = false }: { name?: string; detail?: boolean }) {
+  if (!name) return <span>Goal</span>
+  return <span className="goals-value"><i aria-hidden style={{ background: VALUE_COLORS[name] ?? 'var(--goals-muted)' }} />{detail ? `Guided by ${name}` : name}</span>
+}
 
 export default function Goals() {
   const today = useToday()
@@ -17,307 +32,248 @@ export default function Goals() {
   const [selectedId, setSelectedId] = useState<string>()
   const [creating, setCreating] = useState(false)
 
-  // Deep links: #goals/new opens the composer, #goals/<id> selects a goal.
+  // Keep dashboard links and the quick-add route connected to this page.
   useEffect(() => {
     if (!param) return
     if (param === 'new') setCreating(true)
     const goal = goals.find((g) => g.id === param)
-    if (goal) {
-      setSelectedId(goal.id)
-      setTab(goal.status)
-    }
+    if (goal) { setSelectedId(goal.id); setTab(goal.status) }
     clearParam('goals')
   }, [param, goals])
 
-  const list = useMemo(
-    () =>
-      goals
-        .filter((g) => g.status === tab)
-        .sort((a, b) =>
-          tab === 'active' ? a.due.localeCompare(b.due) : (b.completedOn ?? '').localeCompare(a.completedOn ?? ''),
-        ),
-    [goals, tab],
-  )
+  const active = useMemo(() => goals.filter((g) => g.status === 'active'), [goals])
+  const list = useMemo(() => goals.filter((g) => g.status === tab).sort((a, b) =>
+    tab === 'active' ? a.due.localeCompare(b.due) : (b.completedOn ?? '').localeCompare(a.completedOn ?? ''),
+  ), [goals, tab])
   const selected = list.find((g) => g.id === selectedId) ?? list[0]
-  const valueName = (id?: string) => values.find((v) => v.id === id)?.name
+  const average = active.length ? Math.round(active.reduce((sum, goal) => sum + goalProgress(goal), 0) / active.length * 100) : 0
+  const onTrack = active.filter((g) => goalPace(g, today) === 'on-track').length
+  const next = active.filter((g) => g.due >= today).sort((a, b) => a.due.localeCompare(b.due))[0]
 
   return (
-    <>
-      <PageHeader
-        eyebrow="Plan"
-        title="Goals"
-        subtitle="Meaningful goals, grounded in your values and broken into small, doable steps."
-        actions={
-          <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>
-            <Plus {...ic} />
-            New goal
-          </button>
-        }
-      />
-
-      <div className="mb-4">
-        <Segmented
-          label="Goal status"
-          value={tab}
-          onChange={setTab}
-          options={[
-            { value: 'active', label: 'Active', count: goals.filter((g) => g.status === 'active').length },
-            { value: 'completed', label: 'Completed', count: goals.filter((g) => g.status === 'completed').length },
-          ]}
-        />
-      </div>
-
-      {list.length === 0 ? (
-        <Card>
-          <Empty>
-            {tab === 'active'
-              ? 'No active goals. Start with one that reflects a value you care about.'
-              : 'Completed goals will collect here.'}
-          </Empty>
-        </Card>
-      ) : (
-        <div className="grid items-start gap-4 sm:gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,440px)]">
-          <section className="card p-2 sm:p-2" aria-label={tab === 'active' ? 'Active goals' : 'Completed goals'}>
-            <ul className="flex flex-col gap-0.5">
-              {list.map((g) => (
-                <li key={g.id}>
-                  <GoalRow
-                    goal={g}
-                    today={today}
-                    valueName={valueName(g.valueId)}
-                    selected={g.id === selected?.id}
-                    onSelect={() => setSelectedId(g.id)}
-                  />
-                </li>
+    <div className="goals-page">
+      <PageHeader title="Goals" subtitle="Meaningful goals, grounded in your values and broken into small, doable steps." actions={
+        <button type="button" className="goals-button goals-primary" onClick={() => setCreating(true)}>New goal</button>
+      } />
+      <section className="goals-overview" aria-label="Goals overview">
+        <OverviewStat label="Overall progress" value={active.length ? `${average}%` : '—'} caption="Average across active goals" />
+        <OverviewStat label="On track" value={active.length ? `${onTrack} of ${active.length}` : '—'} caption="Goals keeping an even pace" />
+        <OverviewStat label="Next due in" value={next ? plural(daysBetween(today, next.due), 'day') : '—'} caption={next?.title ?? 'No upcoming due dates'} />
+      </section>
+      <div className="goals-layout">
+        <section className="goals-slab goals-list" aria-labelledby="goals-list-title">
+          <div className="goals-panel-heading">
+            <h2 id="goals-list-title">Your goals</h2>
+            <div className="goals-tabs" role="group" aria-label="Goal status" data-completed={tab === 'completed'}>
+              <span className="goals-tab-tile" aria-hidden="true" />
+              {(['active', 'completed'] as const).map((status) => (
+                <button key={status} type="button" aria-pressed={tab === status} onClick={() => { setTab(status); setSelectedId(undefined) }}>
+                  {status === 'active' ? 'Active' : 'Completed'}<span>{goals.filter((g) => g.status === status).length}</span>
+                </button>
               ))}
-            </ul>
-          </section>
-          {selected && <GoalDetail key={selected.id} goal={selected} today={today} values={values} />}
-        </div>
-      )}
-
-      <Dialog
-        open={creating}
-        onClose={() => setCreating(false)}
-        title="New goal"
-        description="Start with why it matters — that’s what keeps you going."
-      >
-        <NewGoalForm
-          today={today}
-          values={values}
-          onCreated={(id) => {
-            setTab('active')
-            setSelectedId(id)
-            setCreating(false)
-          }}
-        />
+            </div>
+          </div>
+          <ul>
+            {list.length ? list.map((goal) => (
+              <li key={goal.id}><GoalRow goal={goal} today={today} valueName={values.find((v) => v.id === goal.valueId)?.name} selected={goal.id === selected?.id} onSelect={() => setSelectedId(goal.id)} /></li>
+            )) : <li className="goals-empty">{tab === 'active' ? 'No active goals. Add one to start tracking.' : 'Nothing completed yet. Finished goals show up here.'}</li>}
+          </ul>
+          {list.length > 0 && tab === 'active' && <p className="goals-legend"><i aria-hidden="true" />Tick marks an even pace today</p>}
+        </section>
+        {selected ? <GoalDetail key={selected.id} goal={selected} today={today} values={values} onReopen={() => {
+          actions.reopenGoal(selected.id)
+          setSelectedId(selected.id)
+          setTab('active')
+        }} /> : <section className="goals-slab goals-detail"><p className="goals-muted">Select a goal to see its milestones and pace.</p></section>}
+      </div>
+      <Dialog open={creating} onClose={() => setCreating(false)} title="New goal" className="goals-dialog">
+        <NewGoalForm today={today} values={values} onCreated={(id) => { setTab('active'); setSelectedId(id); setCreating(false) }} />
       </Dialog>
-    </>
+    </div>
   )
 }
 
-function GoalRow({
-  goal,
-  today,
-  valueName,
-  selected,
-  onSelect,
-}: {
-  goal: Goal
-  today: string
-  valueName?: string
-  selected: boolean
-  onSelect: () => void
-}) {
+function OverviewStat({ label, value, caption }: { label: string; value: string; caption: string }) {
+  return <div className="goals-stat"><p>{label}</p><strong><RollingNumber value={value} /></strong><span title={caption}>{caption}</span></div>
+}
+
+function RollingNumber({ value }: { value: string }) {
+  const [ready, setReady] = useState(false)
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setReady(true))
+    return () => cancelAnimationFrame(frame)
+  }, [])
+  return <span className="goals-roll" role="img" aria-label={value}>
+    {Array.from(value, (char, index) => /\d/.test(char) ? (
+      <span className="goals-wheel" key={index} aria-hidden="true">
+        <span className="goals-digits" style={{ transform: `translateY(calc(var(--goals-digit-height) * -${ready ? Number(char) : 0}))`, transitionDelay: `${index * 70}ms` }}>
+          {Array.from('0123456789', (digit) => <b key={digit}>{digit}</b>)}
+        </span>
+      </span>
+    ) : <span key={index} aria-hidden="true">{char}</span>)}
+  </span>
+}
+
+function GoalRow({ goal, today, valueName, selected, onSelect }: { goal: Goal; today: string; valueName?: string; selected: boolean; onSelect: () => void }) {
   const pct = Math.round(goalProgress(goal) * 100)
   const pace = goalPace(goal, today)
   const left = daysBetween(today, goal.due)
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-pressed={selected}
-      data-selected={selected}
-      className="row row-interactive mx-0 w-full flex-col items-stretch gap-3 rounded-[20px] px-4 py-4 text-left"
-    >
-      <span className="flex items-start justify-between gap-4">
-        <span className="min-w-0">
-          <span className="block truncate text-body font-medium">{goal.title}</span>
-          <span className="mt-1 flex flex-wrap items-center gap-x-1.5 text-caption text-tertiary">
-            {valueName && (
-              <>
-                <span>{valueName}</span>
-                <span className="text-faint">·</span>
-              </>
-            )}
-            {goal.status === 'completed' ? (
-              <span>Completed {goal.completedOn ? shortDate(goal.completedOn) : ''}</span>
-            ) : (
-              <span>
-                Due {shortDate(goal.due)} · {left >= 0 ? `${plural(left, 'day')} left` : 'Overdue'}
-              </span>
-            )}
-            {pace === 'behind' && <span className="text-amber">· Behind pace</span>}
+    <button type="button" className="goals-row" aria-pressed={selected} aria-controls="goal-detail" onClick={onSelect}>
+      <span className="goals-row-top">
+        <span className="goals-row-text">
+          <span className="goals-row-title" title={goal.title}>{goal.title}</span>
+          <span className="goals-meta">
+            <GuidedValue name={valueName} />
+            {goal.status === 'completed' ? <span>Completed {goal.completedOn ? shortDate(goal.completedOn) : ''}</span> : <>
+              <span>Due {shortDate(goal.due)}</span>
+              <span>{left === 0 ? 'Due today' : left > 0 ? `${plural(left, 'day')} left` : `${plural(-left, 'day')} overdue`}</span>
+              <PaceStatus goal={goal} today={today} />
+            </>}
           </span>
         </span>
-        <span className="shrink-0 text-label tabular-nums text-tertiary">{pct}%</span>
+        <span className="goals-row-percent">{pct}%</span>
       </span>
-      <Progress
-        value={pct / 100}
-        label={goal.title}
-        tone={goal.status === 'completed' ? 'green' : pace === 'behind' || pace === 'overdue' ? 'amber' : 'cyan'}
-      />
+      <PaceBar goal={goal} today={today} label={goal.title} risk={pace === 'behind' || pace === 'overdue'} />
     </button>
   )
 }
 
-function GoalDetail({ goal, today, values }: { goal: Goal; today: string; values: Value[] }) {
+function PaceStatus({ goal, today }: { goal: Goal; today: string }) {
+  const pace = goalPace(goal, today)
+  return <span className="goals-pace-status" data-risk={pace === 'behind' || pace === 'overdue' || undefined}>{paceLabel[pace]}</span>
+}
+
+function PaceBar({ goal, today, label, risk }: { goal: Goal; today: string; label: string; risk: boolean }) {
+  const pct = Math.round(goalProgress(goal) * 100)
+  const expected = expectedProgress(goal, today) * 100
+  return (
+    <span className="goals-pace-bar" data-risk={risk || undefined} role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-valuetext={`${pct}% complete; even pace ${Math.round(expected)}%`}>
+      <i style={{ width: `${pct}%` }} /><b style={{ left: `${expected}%` }} aria-hidden />
+    </span>
+  )
+}
+
+function GoalDetail({ goal, today, values, onReopen }: { goal: Goal; today: string; values: Value[]; onReopen: () => void }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const pct = Math.round(goalProgress(goal) * 100)
   const pace = goalPace(goal, today)
   const left = daysBetween(today, goal.due)
   const value = values.find((v) => v.id === goal.valueId)
   const doneCount = goal.milestones.filter((m) => m.done).length
+  const completed = goal.status === 'completed'
   const atRisk = pace === 'behind' || pace === 'overdue'
+  const gap = Math.round(pct - expectedProgress(goal, today) * 100)
+  const caption = pct === 100 ? 'Target reached. Mark this goal complete when you’re ready.'
+    : pace === 'overdue' ? `Past the due date with ${100 - pct}% left.`
+    : gap <= -5 ? `${Math.abs(gap)} points behind an even pace to ${shortDate(goal.due)}.`
+    : gap >= 5 ? `${gap} points ahead of an even pace to ${shortDate(goal.due)}.`
+    : `Right on an even pace to ${shortDate(goal.due)}.`
+  const remaining = goal.metric ? Math.max(0, goal.metric.target - goal.metric.current) : 0
+  const countNote = remaining === 0 ? 'Target reached. Mark this goal complete when you’re ready.'
+    : left <= 0 ? `${remaining} ${goal.metric?.unit} to go${left < 0 ? ' and the due date has passed' : ' today'}.`
+    : `About ${(remaining / (left / 7)).toFixed(1)} ${goal.metric?.unit} a week to finish on time.`
+
+  useEffect(() => {
+    if (!confirmDelete) return
+    const timer = window.setTimeout(() => setConfirmDelete(false), 3000)
+    return () => window.clearTimeout(timer)
+  }, [confirmDelete])
 
   return (
-    <section className="card xl:sticky xl:top-6" aria-label={`${goal.title} details`}>
-      <p className="text-caption font-medium text-muted">{value ? `Guided by ${value.name}` : 'Goal'}</p>
-      <h2 className="mt-1 text-heading font-medium">{goal.title}</h2>
-      {goal.why && <p className="mt-2 text-body text-secondary">{goal.why}</p>}
-
-      <dl className="mt-5 grid grid-cols-3 divide-x divide-line rounded-row border border-line">
-        <div className="px-3 py-2.5">
-          <dt className="text-caption text-muted">Due</dt>
-          <dd className="mt-0.5 text-label font-medium">{shortDate(goal.due)}</dd>
-        </div>
-        <div className="px-3 py-2.5">
-          <dt className="text-caption text-muted">{goal.status === 'completed' ? 'Finished' : 'Time left'}</dt>
-          <dd className="mt-0.5 text-label font-medium tabular-nums">
-            {goal.status === 'completed'
-              ? goal.completedOn
-                ? shortDate(goal.completedOn)
-                : '—'
-              : left >= 0
-                ? plural(left, 'day')
-                : `${plural(-left, 'day')} late`}
-          </dd>
-        </div>
-        <div className="px-3 py-2.5">
-          <dt className="text-caption text-muted">Pace</dt>
-          <dd className={cx('mt-0.5 text-label font-medium', atRisk && 'text-amber')}>{paceLabel[pace]}</dd>
-        </div>
+    <section id="goal-detail" className="goals-slab goals-detail" aria-labelledby="goal-detail-title">
+      <p className="goals-meta"><GuidedValue name={value?.name} detail /></p>
+      <h2 id="goal-detail-title">{goal.title}</h2>
+      {goal.why && <p className="goals-why">{goal.why}</p>}
+      <dl className="goals-facts">
+        <div><dt>Due</dt><dd>{shortDate(goal.due)}</dd></div>
+        <div><dt>{completed ? 'Status' : 'Time left'}</dt><dd>{completed ? 'Completed' : left < 0 ? `${plural(-left, 'day')} over` : plural(left, 'day')}</dd></div>
+        <div><dt>Pace</dt><dd><PaceStatus goal={goal} today={today} /></dd></div>
       </dl>
-
-      <div className="mt-5">
-        <div className="mb-2 flex items-baseline justify-between">
-          <span className="text-label text-muted">Progress</span>
-          <span className="text-label font-medium tabular-nums">{pct}%</span>
+      <div className="goals-progress-heading"><span>Progress</span><b>{pct}%</b></div>
+      <PaceBar goal={goal} today={today} label={`${goal.title} progress`} risk={atRisk} />
+      {!completed && <><PaceChart goal={goal} today={today} risk={atRisk} /><p className="goals-caption">{caption}</p></>}
+      <hr />
+      {goal.metric && <>
+        <div className="goals-section-heading"><h3>Count</h3></div>
+        <div className="goals-counter">
+          <button type="button" className="goals-icon-button" aria-label={`Decrease ${goal.metric.unit}`} disabled={goal.metric.current <= 0 || completed} onClick={() => actions.setMetric(goal.id, goal.metric!.current - 1)}><Minus size={18} /></button>
+          <p><b>{goal.metric.current}</b> of {goal.metric.target} {goal.metric.unit}</p>
+          <button type="button" className="goals-icon-button" aria-label={`Increase ${goal.metric.unit}`} disabled={goal.metric.current >= goal.metric.target || completed} onClick={() => actions.setMetric(goal.id, goal.metric!.current + 1)}><Plus size={18} /></button>
         </div>
-        <Progress
-          value={pct / 100}
-          label={`${goal.title} progress`}
-          tone={goal.status === 'completed' ? 'green' : atRisk ? 'amber' : 'cyan'}
-        />
-        {goal.metric && (
-          <div className="mt-3 flex items-center justify-between gap-3">
-            <span className="text-label tabular-nums text-secondary">
-              {goal.metric.current} of {goal.metric.target} {goal.metric.unit}
-            </span>
-            <div className="flex gap-1">
-              <button
-                type="button"
-                className="icon-btn bg-wash"
-                aria-label={`Decrease ${goal.metric.unit}`}
-                disabled={goal.metric.current <= 0 || goal.status === 'completed'}
-                onClick={() => actions.setMetric(goal.id, goal.metric!.current - 1)}
-              >
-                <Minus size={14} strokeWidth={1.75} />
+        {!completed && <p className="goals-caption">{countNote}</p>}
+      </>}
+      {(!goal.metric || goal.milestones.length > 0) && <>
+        <div className="goals-section-heading"><h3>Milestones</h3><span>{doneCount} of {goal.milestones.length}</span></div>
+        <ul className="goals-milestones">
+          {goal.milestones.map((milestone) => (
+            <li key={milestone.id}>
+              <button id={`goal-step-${milestone.id}`} type="button" className="goals-check" role="checkbox" aria-checked={milestone.done} aria-label={milestone.title} onClick={() => actions.toggleMilestone(goal.id, milestone.id)}>
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 10.5l3 3 5-6" /></svg>
               </button>
-              <button
-                type="button"
-                className="icon-btn bg-wash"
-                aria-label={`Increase ${goal.metric.unit}`}
-                disabled={goal.metric.current >= goal.metric.target || goal.status === 'completed'}
-                onClick={() => actions.setMetric(goal.id, goal.metric!.current + 1)}
-              >
-                <Plus size={14} strokeWidth={1.75} />
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="divider my-5" />
-
-      <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-label font-medium">Milestones</h3>
-        {goal.milestones.length > 0 && (
-          <span className="text-caption tabular-nums text-muted">
-            {doneCount} of {goal.milestones.length}
-          </span>
-        )}
-      </div>
-      {goal.milestones.length === 0 && !goal.metric && (
-        <p className="text-label text-muted">Break this goal into a few concrete steps.</p>
-      )}
-      <ul className="flex flex-col gap-0.5">
-        {goal.milestones.map((m) => (
-          <li key={m.id} className="row row-interactive min-h-9 py-1.5">
-            <Check small checked={m.done} label={m.title} onChange={() => actions.toggleMilestone(goal.id, m.id)} />
-            <span className={cx('min-w-0 flex-1 text-label', m.done ? 'text-muted line-through decoration-faint' : 'text-secondary')}>
-              {m.title}
-            </span>
-            <RemoveButton label={`Remove ${m.title}`} onClick={() => actions.removeMilestone(goal.id, m.id)} className="-my-1 -mr-1.5" />
-          </li>
-        ))}
-      </ul>
-      {goal.status === 'active' && (
-        <InlineAdd buttonLabel="Add milestone" placeholder="Next concrete step" onSubmit={(t) => actions.addMilestone(goal.id, t)} />
-      )}
-
-      <div className="mt-6 flex flex-wrap items-center justify-between gap-2">
-        {goal.status === 'active' ? (
-          <button type="button" className="btn btn-subtle" onClick={() => actions.completeGoal(goal.id)}>
-            <CheckIcon {...ic} />
-            Mark complete
-          </button>
-        ) : (
-          <button type="button" className="btn btn-subtle" onClick={() => actions.reopenGoal(goal.id)}>
-            <RotateCcw {...ic} />
-            Reopen goal
-          </button>
-        )}
-        {confirmDelete ? (
-          <span className="flex items-center gap-1">
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirmDelete(false)}>
-              Keep
-            </button>
-            <button type="button" className="btn btn-subtle btn-sm text-amber" onClick={() => actions.removeGoal(goal.id)}>
-              Delete goal
-            </button>
-          </span>
-        ) : (
-          <button type="button" className="icon-btn" aria-label="Delete goal" onClick={() => setConfirmDelete(true)}>
-            <Trash2 {...ic} />
-          </button>
-        )}
+              <label htmlFor={`goal-step-${milestone.id}`} className="goals-milestone-label">{milestone.title}</label>
+              <button type="button" className="goals-remove-step" aria-label={`Remove ${milestone.title}`} onClick={() => actions.removeMilestone(goal.id, milestone.id)}>×</button>
+            </li>
+          ))}
+          {!goal.milestones.length && <li className="goals-empty">No milestones yet. Add the first small step.</li>}
+        </ul>
+        {!completed && <AddMilestone goalId={goal.id} />}
+      </>}
+      <div className="goals-actions">
+        <button type="button" className="goals-button goals-secondary" onClick={() => completed ? onReopen() : actions.completeGoal(goal.id)}>{completed ? 'Reopen goal' : 'Mark complete'}</button>
+        {confirmDelete ? <span className="goals-delete-confirm">
+          <button type="button" className="goals-button goals-ghost" onClick={() => setConfirmDelete(false)}>Keep</button>
+          <button type="button" className="goals-button goals-secondary" onClick={() => actions.removeGoal(goal.id)}>Delete goal</button>
+        </span> : <button type="button" className="goals-button goals-ghost" onClick={() => setConfirmDelete(true)}>Delete</button>}
       </div>
     </section>
   )
 }
 
-function NewGoalForm({
+function AddMilestone({ goalId }: { goalId: string }) {
+  const [title, setTitle] = useState('')
+  return <form className="goals-add-milestone" onSubmit={(event) => {
+    event.preventDefault()
+    if (!title.trim()) return
+    actions.addMilestone(goalId, title.trim())
+    setTitle('')
+  }}>
+    <input aria-label="New milestone" placeholder="Add a milestone" maxLength={90} value={title} onChange={(event) => setTitle(event.target.value)} />
+    <button type="submit" className="goals-button goals-secondary" disabled={!title.trim()}>Add</button>
+  </form>
+}
+
+function PaceChart({ goal, today, risk }: { goal: Goal; today: string; risk: boolean }) {
+  const actual = goalProgress(goal)
+  const expected = expectedProgress(goal, today)
+  const x = 10 + 320 * expected
+  const y = 96 - 84 * actual
+  return <div className="goals-chart" data-risk={risk || undefined}>
+    <svg viewBox="0 0 340 116" role="img" aria-label={`${Math.round(actual * 100)}% progress compared with ${Math.round(expected * 100)}% for an even pace. Dashed line shows an even pace from start to due date; the dot shows your progress today.`}>
+      <line className="goals-chart-axis" x1="10" y1="96" x2="330" y2="96" />
+      <line className="goals-chart-plan" x1="10" y1="96" x2="330" y2="12" />
+      <line className="goals-chart-actual" x1={x} y1="96" x2={x} y2={y} />
+      <circle className="goals-chart-halo" cx={x} cy={y} r="9" />
+      <circle className="goals-chart-dot" cx={x} cy={y} r="4.5" />
+      <text x="10" y="112">{shortDate(goal.start)}</text>
+      <text x="330" y="112" textAnchor="end">{shortDate(goal.due)}</text>
+    </svg>
+  </div>
+}
+
+export function NewGoalForm({
   today,
   values,
   onCreated,
+  initialWhy = '',
 }: {
   today: string
   values: Value[]
   onCreated: (id: string) => void
+  initialWhy?: string
 }) {
   const [title, setTitle] = useState('')
-  const [why, setWhy] = useState('')
+  const [why, setWhy] = useState(initialWhy)
   const [valueId, setValueId] = useState(values[0]?.id ?? '')
   const [due, setDue] = useState(addDays(today, 90))
   const [mode, setMode] = useState<'milestones' | 'number'>('milestones')

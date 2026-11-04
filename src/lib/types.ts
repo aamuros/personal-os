@@ -83,6 +83,7 @@ export interface Reflection {
   drained: string
   adjust: string
   tags: string[]
+  adjustmentDone?: boolean
 }
 
 export type EventKind = 'milestone' | 'memory' | 'achievement'

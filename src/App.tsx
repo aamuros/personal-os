@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ComponentType } from 'react'
 import { CommandPalette } from './components/CommandPalette'
+import { MobileNavigation } from './components/MobileNavigation'
 import { QuickAddDialog } from './components/QuickAdd'
 import { Sidebar } from './components/Sidebar'
 import { NAV } from './lib/nav'
@@ -27,14 +28,21 @@ const PAGES: Record<Route, ComponentType> = {
 
 export default function App() {
   const { route } = useLocation()
-  const { theme, toggleTheme } = useTheme()
+  const { theme, toggleTheme, preference, setPreference } = useTheme()
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [quickAddOpen, setQuickAddOpen] = useState(false)
+  const [navCollapsed, setNavCollapsed] = useState(() => {
+    try { return localStorage.getItem('lifeos:nav-collapsed') === '1' } catch { return false }
+  })
+  useEffect(() => {
+    try { localStorage.setItem('lifeos:nav-collapsed', navCollapsed ? '1' : '0') } catch { /* storage unavailable */ }
+  }, [navCollapsed])
   const mainRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
     document.title = route === 'dashboard' ? 'Life OS' : `${NAV[route].label} · Life OS`
     window.scrollTo({ top: 0 })
+    mainRef.current?.scrollTo({ top: 0 })
   }, [route])
 
   useEffect(() => {
@@ -52,7 +60,7 @@ export default function App() {
   const Page = PAGES[route]
 
   return (
-    <div className="min-h-dvh">
+    <div className="app-shell" data-nav={navCollapsed ? 'collapsed' : 'expanded'}>
       <button type="button" className="skip-link" onClick={() => mainRef.current?.focus()}>
         Skip to content
       </button>
@@ -60,9 +68,10 @@ export default function App() {
         route={route}
         theme={theme}
         onToggleTheme={toggleTheme}
-        onSearch={() => setPaletteOpen(true)}
-        onQuickAdd={openQuickAdd}
+        collapsed={navCollapsed}
+        onToggleCollapsed={() => setNavCollapsed((value) => !value)}
       />
+      <MobileNavigation route={route} appearance={preference} onAppearanceChange={setPreference} />
       <main ref={mainRef} id="main" tabIndex={-1} className="main">
         <div className="panel">
           <div key={route} className="page-enter mx-auto w-full max-w-[1120px]">

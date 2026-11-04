@@ -15,8 +15,8 @@ function createRandom(seed: number) {
 export function createSeed(today: string): State {
   const random = createRandom(20261103)
   const year = Number(today.slice(0, 4))
-  const birthYear = year - 25
-  const birthDate = `${birthYear}-03-12`
+  const birthYear = 1978
+  const birthDate = '1978-07-17'
   const atAge = (age: number, monthDay: string) => `${birthYear + age}-${monthDay}`
   const ago = (days: number) => addDays(today, -days)
   const ahead = (days: number) => addDays(today, days)
@@ -299,7 +299,7 @@ export function createSeed(today: string): State {
 
   return {
     version: 1,
-    profile: { name: 'Adrian Moreau', birthDate, lifeExpectancy: 80, reviewedOn: ago(9) },
+    profile: { name: 'Adrian Moreau', birthDate, lifeExpectancy: 70, reviewedOn: ago(9) },
     priorities: [
       { id: 'p-1', title: 'Finish thesis outline', time: '09:00', done: false, date: today },
       { id: 'p-2', title: 'Gym — upper body', time: '12:30', done: false, date: today },

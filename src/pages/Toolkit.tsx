@@ -30,12 +30,11 @@ export default function Toolkit() {
   return (
     <>
       <PageHeader
-        eyebrow="Adapt"
         title="Psychological toolkit"
         subtitle="Short, guided exercises inspired by The 12 Levers. Pick one when you feel stuck, scattered, or ready to change something."
       />
 
-      <div className="mb-4 grid gap-4 sm:mb-6 sm:grid-cols-2 sm:gap-6 xl:grid-cols-3">
+      <div className="mb-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {EXERCISES.map((ex) => {
           const Icon = ex.icon
           return (

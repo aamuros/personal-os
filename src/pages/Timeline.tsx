@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowRight, Plus } from 'lucide-react'
 import { Card, Dialog, Empty, Field, PageHeader, RemoveButton, Segmented, cx, ic } from '../components/ui'
+import { TimelineWheel } from '../components/TimelineWheel'
 import { formatDate, shortDate, untilPhrase } from '../lib/date'
 import { useToday } from '../lib/hooks'
 import { clearParam, useLocation } from '../lib/router'
@@ -18,7 +19,9 @@ export default function Timeline() {
   const today = useToday()
   const { param } = useLocation()
   const events = useStore((s) => s.events)
-  const birthYear = useStore((s) => Number(s.profile.birthDate.slice(0, 4)))
+  const profile = useStore((s) => s.profile)
+  const birthYear = Number(profile.birthDate.slice(0, 4))
+  const [tab, setTab] = useState<'events' | 'wheel'>('events')
   const [filter, setFilter] = useState<EventKind | 'all'>('all')
   const [adding, setAdding] = useState(false)
 
@@ -48,7 +51,6 @@ export default function Timeline() {
   return (
     <>
       <PageHeader
-        eyebrow="Reflect"
         title="Timeline"
         subtitle="The moments, milestones, and achievements that shaped your story."
         actions={
@@ -58,6 +60,22 @@ export default function Timeline() {
           </button>
         }
       />
+
+      <div className="timeline-tabs" role="tablist" aria-label="Timeline view"
+        onKeyDown={(e) => {
+          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return
+          e.preventDefault()
+          const next = e.key === 'Home' ? 'events' : e.key === 'End' ? 'wheel' : tab === 'events' ? 'wheel' : 'events'
+          setTab(next)
+          e.currentTarget.querySelector<HTMLButtonElement>(`#timeline-tab-${next}`)?.focus()
+        }}>
+        {(['events', 'wheel'] as const).map((view) => (
+          <button key={view} type="button" role="tab" id={`timeline-tab-${view}`} aria-selected={tab === view}
+            aria-controls={`timeline-panel-${view}`} tabIndex={tab === view ? 0 : -1} onClick={() => setTab(view)}>
+            {view === 'events' ? 'Events' : 'Wheel'}
+          </button>
+        ))}
+      </div>
 
       <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="Filter events">
         <button type="button" className="chip" aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>
@@ -77,67 +95,75 @@ export default function Timeline() {
         ))}
       </div>
 
-      <div className="grid items-start gap-4 sm:gap-6 xl:grid-cols-[minmax(0,728fr)_minmax(0,368fr)]">
-        <div className="flex min-w-0 flex-col gap-4 sm:gap-6">
-          {upcoming.length > 0 && (
-            <Card title="Upcoming">
-              <EventList events={upcoming} today={today} />
-            </Card>
-          )}
-          <section className="card" aria-label="Past events">
-            {years.length === 0 ? (
-              <Empty>No events here yet. Add a memory, milestone, or achievement.</Empty>
-            ) : (
-              years.map(([year, list], i) => (
-                <div key={year} className={cx(i > 0 && 'mt-6')}>
-                  <div className="mb-1 flex items-baseline gap-2">
-                    <h2 className="text-title font-medium tabular-nums">{year}</h2>
-                    <span className="text-caption text-muted">Age {Number(year) - birthYear}</span>
-                  </div>
-                  <EventList events={list} today={today} />
-                </div>
-              ))
-            )}
-          </section>
-        </div>
+      <div role="tabpanel" id="timeline-panel-wheel" aria-labelledby="timeline-tab-wheel" hidden={tab !== 'wheel'}>
+        {tab === 'wheel' && <TimelineWheel profile={profile} today={today} events={filtered}
+          renderEvents={(list) => <EventList events={list} today={today} />} />}
+      </div>
 
-        <div className="grid min-w-0 items-start gap-4 sm:gap-6 md:grid-cols-2 xl:grid-cols-1">
-          <Card title={`${formatDate(today, { month: 'long' })} in past years`}>
-            {thisMonth.length === 0 ? (
-              <Empty>Nothing recorded for this month yet.</Empty>
-            ) : (
-              <ul className="-mt-1 flex flex-col gap-3">
-                {thisMonth.slice(0, 4).map((e) => (
-                  <li key={e.id} className="flex items-start gap-3">
-                    <span className="tl-dot m-0 mt-1.5 shadow-none" data-kind={e.kind} aria-hidden />
-                    <div className="min-w-0">
-                      <p className="text-label text-secondary">{e.title}</p>
-                      <p className="text-caption text-muted">
-                        {Number(today.slice(0, 4)) - Number(e.date.slice(0, 4))} years ago · {e.date.slice(0, 4)}
-                      </p>
+      <div role="tabpanel" id="timeline-panel-events" aria-labelledby="timeline-tab-events" hidden={tab !== 'events'}>
+        <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,728fr)_minmax(0,368fr)]">
+          <div className="flex min-w-0 flex-col gap-4">
+            {upcoming.length > 0 && (
+              <Card title="Upcoming">
+                <EventList events={upcoming} today={today} />
+              </Card>
+            )}
+            <section className="card" aria-label="Past events">
+              {years.length === 0 ? (
+                <Empty>No events here yet. Add a memory, milestone, or achievement.</Empty>
+              ) : (
+                years.map(([year, list], i) => (
+                  <div key={year} className={cx(i > 0 && 'mt-6')}>
+                    <div className="mb-1 flex items-baseline gap-2">
+                      <h2 className="text-title font-medium tabular-nums">{year}</h2>
+                      <span className="text-caption text-muted">Age {Number(year) - birthYear}</span>
                     </div>
+                    <EventList events={list} today={today} />
+                  </div>
+                ))
+              )}
+            </section>
+          </div>
+
+          <div className="grid min-w-0 items-start gap-4 md:grid-cols-2 xl:grid-cols-1">
+            <Card title={`${formatDate(today, { month: 'long' })} in past years`}>
+              {thisMonth.length === 0 ? (
+                <Empty>Nothing recorded for this month yet.</Empty>
+              ) : (
+                <ul className="-mt-1 flex flex-col gap-3">
+                  {thisMonth.slice(0, 4).map((e) => (
+                    <li key={e.id} className="flex items-start gap-3">
+                      <span className="tl-dot m-0 mt-1.5 shadow-none" data-kind={e.kind} aria-hidden />
+                      <div className="min-w-0">
+                        <p className="text-label text-secondary">{e.title}</p>
+                        <p className="text-caption text-muted">
+                          {Number(today.slice(0, 4)) - Number(e.date.slice(0, 4))} years ago · {e.date.slice(0, 4)}
+                        </p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
+            <Card title="At a glance">
+              <ul className="-mt-1 flex flex-col gap-2.5">
+                {KINDS.map((k) => (
+                  <li key={k.value} className="flex items-center gap-2.5 text-label">
+                    <span className="tl-dot m-0 shadow-none" data-kind={k.value} aria-hidden />
+                    <span className="flex-1 text-secondary">{k.plural}</span>
+                    <span className="tabular-nums text-muted">{counts[k.value]}</span>
                   </li>
                 ))}
               </ul>
-            )}
-          </Card>
-          <Card title="At a glance">
-            <ul className="-mt-1 flex flex-col gap-2.5">
-              {KINDS.map((k) => (
-                <li key={k.value} className="flex items-center gap-2.5 text-label">
-                  <span className="tl-dot m-0 shadow-none" data-kind={k.value} aria-hidden />
-                  <span className="flex-1 text-secondary">{k.plural}</span>
-                  <span className="tabular-nums text-muted">{counts[k.value]}</span>
-                </li>
-              ))}
-            </ul>
-            <div className="divider my-4" />
-            <a href="#life-calendar" className="card-link">
-              See them on your life calendar
-              <ArrowRight size={12} strokeWidth={1.75} />
-            </a>
-          </Card>
+              <div className="divider my-4" />
+              <a href="#life-calendar" className="card-link">
+                See them on your life calendar
+                <ArrowRight size={12} strokeWidth={1.75} />
+              </a>
+            </Card>
+          </div>
         </div>
+
       </div>
 
       <Dialog open={adding} onClose={() => setAdding(false)} title="Add event" description="Record a moment worth remembering.">

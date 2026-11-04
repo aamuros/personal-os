@@ -3,7 +3,7 @@
   <head>
     <!-- figma:head-start -->
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#000000" />
     <title>Life OS</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -13,6 +13,7 @@
       try {
         var theme = localStorage.getItem('lifeos:theme')
         if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme
+        if (theme === 'system') document.documentElement.dataset.theme = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
       } catch (e) {}
     </script>
     <!-- figma:head-end -->

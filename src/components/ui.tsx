@@ -1,5 +1,7 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { Check as CheckIcon, Plus, X } from 'lucide-react'
+import { longDate } from '../lib/date'
+import { useToday } from '../lib/hooks'
 
 /** Default icon props — matches the 1.5px stroke of the original Bencho icons. */
 export const ic = { size: 16, strokeWidth: 1.5 } as const
@@ -19,16 +21,15 @@ export function PageHeader({
   subtitle?: ReactNode
   actions?: ReactNode
 }) {
+  const today = useToday()
   return (
-    <header className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-      <div className="flex min-w-0 flex-col gap-2">
-        {eyebrow && <p className="text-label font-medium text-muted">{eyebrow}</p>}
-        <h1 className="text-[28px] leading-[34px] font-medium tracking-[-0.56px] sm:text-display sm:leading-[36px] sm:tracking-[-0.64px]">
-          {title}
-        </h1>
-        {subtitle && <p className="max-w-[62ch] text-body text-muted sm:text-lead">{subtitle}</p>}
+    <header className="page-header">
+      <div className="page-header-copy">
+        <p className="page-eyebrow">{eyebrow ?? longDate(today)}</p>
+        <h1 className="page-title">{title}</h1>
+        {subtitle && <p className="page-subtitle">{subtitle}</p>}
       </div>
-      {actions && <div className="flex shrink-0 flex-wrap items-center gap-3">{actions}</div>}
+      {actions && <div className="page-header-actions">{actions}</div>}
     </header>
   )
 }

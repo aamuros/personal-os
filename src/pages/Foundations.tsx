@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { ArrowDown, ArrowUp, Check as CheckIcon, Plus } from 'lucide-react'
-import { Card, Empty, InlineAdd, PageHeader, RemoveButton, cx, ic } from '../components/ui'
+import { FoundationsGap } from '../components/FoundationsGap'
+import { Card, Dialog, Empty, InlineAdd, PageHeader, RemoveButton, ic } from '../components/ui'
 import { sincePhrase } from '../lib/date'
 import { useToday } from '../lib/hooks'
 import { actions, useStore } from '../lib/store'
 import type { LifeArea } from '../lib/types'
+import { NewGoalForm } from './Goals'
 
 export default function Foundations() {
   const today = useToday()
@@ -14,7 +16,6 @@ export default function Foundations() {
   return (
     <>
       <PageHeader
-        eyebrow="Understand"
         title="Guiding foundations"
         subtitle="The values, principles, and priorities everything else is built on. Revisit them once a week."
         actions={
@@ -29,7 +30,7 @@ export default function Foundations() {
           </>
         }
       />
-      <div className="grid items-start gap-4 sm:gap-6 xl:grid-cols-2">
+      <div className="grid items-start gap-4 xl:grid-cols-2">
         <ValuesCard />
         <PrinciplesCard />
       </div>
@@ -153,85 +154,65 @@ function PrinciplesCard() {
 
 function AreasCard() {
   const areas = useStore((s) => s.areas)
-  const biggest = areas.reduce<LifeArea | undefined>(
-    (best, a) =>
-      !best || a.importance - a.satisfaction > best.importance - best.satisfaction ? a : best,
-    undefined,
-  )
-  const showInsight = biggest && biggest.importance - biggest.satisfaction >= 2
+  const values = useStore((s) => s.values)
+  const today = useToday()
+  const [goalArea, setGoalArea] = useState<LifeArea | null>(null)
+  const [editingImportance, setEditingImportance] = useState(false)
+  const [createdGoal, setCreatedGoal] = useState(false)
 
   return (
-    <Card
-      className="mt-4 sm:mt-6"
-      title="Life priorities"
-      aside={
-        <span className="hidden items-center gap-4 text-caption text-muted sm:flex">
-          <span className="flex items-center gap-1.5">
-            <span className="size-2 rounded-full bg-secondary" />
-            Importance
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="size-2 rounded-full bg-cyan" />
-            Satisfaction
-          </span>
-        </span>
-      }
-    >
-      <p className="-mt-2 mb-5 text-label text-muted">
-        {showInsight ? (
-          <>
-            <span className="text-fg">{biggest.name}</span> matters a lot but feels neglected right now. Consider a
-            goal or habit for it.
-          </>
-        ) : (
-          'Rate how much each area matters and how satisfied you feel with it today.'
-        )}
+    <div className="mt-4">
+      <FoundationsGap
+        areas={areas}
+        onSatisfactionChange={(id, value) => actions.rateArea(id, 'satisfaction', value)}
+        onCreateGoal={(area) => {
+          setCreatedGoal(false)
+          setGoalArea(area)
+        }}
+        onEditImportance={() => setEditingImportance(true)}
+      />
+      <p role="status" className={createdGoal ? 'mt-3 text-label text-muted' : 'sr-only'}>
+        {createdGoal && <>Goal created. <a href="#goals" className="text-fg underline underline-offset-4">View goals</a></>}
       </p>
-      <div className="hidden grid-cols-[minmax(0,1fr)_116px_116px_132px] gap-6 pb-2 text-caption font-medium text-muted sm:grid">
-        <span>Area</span>
-        <span>Importance</span>
-        <span>Satisfaction</span>
-        <span className="text-right">Status</span>
-      </div>
-      <ul>
-        {areas.map((a) => {
-          const gap = a.importance - a.satisfaction
-          return (
-            <li
-              key={a.id}
-              className="grid grid-cols-2 items-center gap-x-6 gap-y-3 border-t border-line py-3.5 sm:grid-cols-[minmax(0,1fr)_116px_116px_132px]"
-            >
-              <span className="text-body font-medium">{a.name}</span>
-              <span className="text-right text-label sm:order-last">
-                {gap >= 2 ? (
-                  <span className="text-amber">Needs attention</span>
-                ) : gap === 1 ? (
-                  <span className="text-tertiary">Room to grow</span>
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 text-tertiary">
-                    <span className="size-1.5 rounded-full bg-green" aria-hidden />
-                    Aligned
-                  </span>
-                )}
-              </span>
-              <span className="flex flex-col gap-1">
-                <span className="text-caption text-muted sm:hidden">Importance</span>
-                <Rater label={`${a.name} importance`} value={a.importance} onChange={(n) => actions.rateArea(a.id, 'importance', n)} />
-              </span>
-              <span className="flex flex-col gap-1">
-                <span className="text-caption text-muted sm:hidden">Satisfaction</span>
-                <Rater
-                  label={`${a.name} satisfaction`}
-                  value={a.satisfaction}
-                  tone="cyan"
-                  onChange={(n) => actions.rateArea(a.id, 'satisfaction', n)}
-                />
-              </span>
+      <Dialog
+        open={goalArea !== null}
+        onClose={() => setGoalArea(null)}
+        title={`New goal for ${goalArea?.name ?? 'a life area'}`}
+        description="Give this area a little more attention with a concrete next step."
+      >
+        <NewGoalForm
+          today={today}
+          values={values}
+          initialWhy={goalArea ? `${goalArea.name} matters to me, and I want to give it more attention.` : ''}
+          onCreated={() => {
+            setGoalArea(null)
+            setCreatedGoal(true)
+          }}
+        />
+      </Dialog>
+      <Dialog
+        open={editingImportance}
+        onClose={() => setEditingImportance(false)}
+        title="Edit importance"
+        description="Rate how much each area matters to you, from 1 to 5."
+      >
+        <ul className="flex flex-col divide-y divide-line">
+          {areas.map((area) => (
+            <li key={area.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+              <span className="text-body font-medium">{area.name}</span>
+              <Rater
+                label={`${area.name} importance`}
+                value={area.importance}
+                onChange={(value) => actions.rateArea(area.id, 'importance', value)}
+              />
             </li>
-          )
-        })}
-      </ul>
-    </Card>
+          ))}
+        </ul>
+        <div className="mt-5 flex justify-end">
+          <button type="button" className="btn btn-primary" onClick={() => setEditingImportance(false)}>Done</button>
+        </div>
+      </Dialog>
+    </div>
   )
 }
 
@@ -239,21 +220,18 @@ function Rater({
   value,
   onChange,
   label,
-  tone,
 }: {
   value: number
   onChange: (value: number) => void
   label: string
-  tone?: 'cyan'
 }) {
   return (
-    <span role="radiogroup" aria-label={label} className={cx('rater')} data-tone={tone}>
+    <span role="group" aria-label={label} className="rater">
       {[1, 2, 3, 4, 5].map((n) => (
         <button
           key={n}
           type="button"
-          role="radio"
-          aria-checked={value === n}
+          aria-pressed={value === n}
           aria-label={`${n} of 5`}
           data-on={n <= value}
           onClick={() => onChange(n)}
