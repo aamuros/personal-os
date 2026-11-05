@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { PageHeader } from '../components/ui'
+import { TagInput } from '../components/TagInput'
 import { addDays, daysBetween, formatDate, shortDate } from '../lib/date'
 import { MOODS, moodLabel } from '../lib/derive'
 import { useToday } from '../lib/hooks'
@@ -36,7 +37,7 @@ export default function Reflections() {
       <div className="reflection-columns">
         <div className="reflection-column">
           <div ref={composerRef}>
-            <ReflectionForm key={`${today}-${formRevision}`} today={today} initial={todayEntry} onSaved={() => {
+            <ReflectionForm key={`${today}-${formRevision}`} today={today} initial={todayEntry} suggestions={[...TAGS, ...sorted.flatMap((entry) => entry.tags)]} onSaved={() => {
               setOpenDates((dates) => new Set(dates).add(today))
             }} />
           </div>
@@ -95,7 +96,7 @@ function RollingNumber({ value }: { value: string }) {
   </span>
 }
 
-function ReflectionForm({ today, initial, onSaved }: { today: string; initial?: Reflection; onSaved: () => void }) {
+function ReflectionForm({ today, initial, suggestions, onSaved }: { today: string; initial?: Reflection; suggestions: string[]; onSaved: () => void }) {
   const [mood, setMood] = useState(initial?.mood ?? 0)
   const [answers, setAnswers] = useState<Record<PromptKey, string>>({
     wentWell: initial?.wentWell ?? '', drained: initial?.drained ?? '', adjust: initial?.adjust ?? '',
@@ -131,7 +132,7 @@ function ReflectionForm({ today, initial, onSaved }: { today: string; initial?: 
       onSaved()
     }}>
       <span className="reflection-caption" id={moodLabelId}>How did today feel?</span>
-      <div className="reflection-moods" ref={moodRef} role="radiogroup" aria-labelledby={moodLabelId} onKeyDown={(event) => {
+      <div className="reflection-moods" data-mood={mood || undefined} ref={moodRef} role="radiogroup" aria-labelledby={moodLabelId} onKeyDown={(event) => {
         const direction = ({ ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 } as Record<string, number>)[event.key]
         if (!direction && event.key !== 'Home' && event.key !== 'End') return
         event.preventDefault()
@@ -151,11 +152,7 @@ function ReflectionForm({ today, initial, onSaved }: { today: string; initial?: 
         </label>)}
       </div>
       <div className="reflection-form-footer">
-        <div className="reflection-chips" role="group" aria-label="Themes, optional">
-          {TAGS.map((tag) => <button key={tag} type="button" className="reflection-chip" aria-pressed={tags.includes(tag)} onClick={() => {
-            setTags((previous) => previous.includes(tag) ? previous.filter((item) => item !== tag) : [...previous, tag])
-          }}>{tag}</button>)}
-        </div>
+        <TagInput value={tags} onChange={setTags} suggestions={suggestions} label="Themes, optional" placeholder="Add tag…" />
         <button type="submit" className="reflection-save" disabled={!canSave} data-saved={saved || undefined}>{saved ? 'Saved' : 'Save reflection'}</button>
         <span className="sr-only" role="status">{saved ? 'Reflection saved.' : ''}</span>
       </div>
@@ -202,7 +199,8 @@ function Patterns({ reflections, today }: { reflections: Reflection[]; today: st
   const byDate = new Map(recent.map((entry) => [entry.date, entry]))
   const average = (entries: Reflection[]) => entries.reduce((sum, entry) => sum + entry.mood, 0) / entries.length
   const mood = recent.length ? average(recent) : 0
-  const themes = TAGS.map((tag) => ({ tag, entries: recent.filter((entry) => entry.tags.includes(tag)) }))
+  const themeNames = [...new Map(recent.flatMap((entry) => entry.tags).map((tag) => [tag.toLowerCase(), tag])).values()]
+  const themes = themeNames.map((tag) => ({ tag, entries: recent.filter((entry) => entry.tags.some((item) => item.toLowerCase() === tag.toLowerCase())) }))
     .filter((theme) => theme.entries.length).sort((a, b) => b.entries.length - a.entries.length)
   const ranked = themes.filter((theme) => theme.entries.length >= 2).sort((a, b) => average(b.entries) - average(a.entries))
   const best = ranked[0]

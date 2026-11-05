@@ -87,31 +87,31 @@ export default function LifeCalendar() {
   return (
     <div className="life-calendar">
       <PageHeader title="Life calendar" subtitle="Your life in weeks. Each square is one week — a quiet reminder to spend the rest of them on what matters." />
-      <section className="calendar-slab" aria-label="Life summary">
-        <div className="calendar-stats">
-          <CalendarStat label="Age" value={String(stats.age)} caption={`and ${plural(stats.weeksSinceBirthday, 'week')}`} />
-          <CalendarStat label="Weeks lived" value={stats.weekNumber.toLocaleString()} caption="including this one" />
-          <CalendarStat label="Weeks left" value={stats.weeksLeft.toLocaleString()} caption={`of ${stats.totalWeeks.toLocaleString()}`} />
-          <CalendarStat label="Lived" value={`${Math.round(stats.pct * 100)}%`} caption={`of ${profile.lifeExpectancy} years`} />
-        </div>
-        <div className="calendar-progress" role="progressbar" aria-label="Life lived" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(stats.pct * 100)}>
-          <span style={{ clipPath: `inset(0 ${(1 - stats.pct) * 100}% 0 0)` }} />
-        </div>
+      <section className="calendar-stats" aria-label="Life summary">
+        <CalendarStat label="Age" value={String(stats.age)} caption={`and ${plural(stats.weeksSinceBirthday, 'week')}`} />
+        <CalendarStat label="Weeks lived" value={stats.weekNumber.toLocaleString()} caption="including this one" />
+        <CalendarStat label="Weeks left" value={stats.weeksLeft.toLocaleString()} caption={`of ${stats.totalWeeks.toLocaleString()}`} />
+        <CalendarStat label="Lived" value={`${Math.round(stats.pct * 100)}%`} caption={`of ${profile.lifeExpectancy} years`} />
       </section>
       <div className="calendar-columns">
         <section className="calendar-slab calendar-weeks" ref={sectionRef} aria-labelledby="weeks-title">
           <div className="calendar-card-heading"><h2 id="weeks-title">Your weeks</h2></div>
+          <div className="calendar-progress" role="progressbar" aria-label="Life lived" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(stats.pct * 100)}>
+            <span style={{ clipPath: `inset(0 ${(1 - stats.pct) * 100}% 0 0)` }} />
+          </div>
           <p id="week-readout" className="calendar-caption" aria-live="polite">{caption}</p>
-          <LifeGrid
-            key={`${profile.birthDate}-${profile.lifeExpectancy}`}
-            gridRef={gridRef}
-            years={profile.lifeExpectancy}
-            current={stats.current}
-            marked={marked}
-            selected={selection?.week ?? null}
-            onHover={setHovered}
-            onSelect={openWeek}
-          />
+          <div className="calendar-grid-scroll" onScroll={() => { setSelection(null); setHovered(null) }}>
+            <LifeGrid
+              key={`${profile.birthDate}-${profile.lifeExpectancy}`}
+              gridRef={gridRef}
+              years={profile.lifeExpectancy}
+              current={stats.current}
+              marked={marked}
+              selected={selection?.week ?? null}
+              onHover={setHovered}
+              onSelect={openWeek}
+            />
+          </div>
           {selection && (
             <div
               ref={popoverRef}
@@ -217,9 +217,9 @@ function CalendarStat({ label, value, caption }: { label: string; value: string;
     return () => cancelAnimationFrame(frame)
   }, [])
   return (
-    <div>
-      <div className="calendar-stat-label">{label}</div>
-      <div className="calendar-number" aria-label={value}>
+    <div className="calendar-slab calendar-stat">
+      <p className="calendar-stat-label">{label}</p>
+      <strong className="calendar-number" role="img" aria-label={value}>
         {Array.from(value, (character, i) => /\d/.test(character) ? (
           <span className="calendar-digit" key={`${value.length}-${i}`} aria-hidden>
             <span className="calendar-digit-strip" style={{ transform: `translateY(-${ready ? Number(character) * 1.15 : 0}em)`, transitionDelay: `${i * 70}ms` }}>
@@ -227,8 +227,8 @@ function CalendarStat({ label, value, caption }: { label: string; value: string;
             </span>
           </span>
         ) : <span key={`${value.length}-${i}`} aria-hidden>{character}</span>)}
-      </div>
-      <div className="calendar-stat-caption">{caption}</div>
+      </strong>
+      <span className="calendar-stat-caption" title={caption}>{caption}</span>
     </div>
   )
 }
@@ -300,6 +300,7 @@ const LifeGrid = memo(function LifeGrid({ gridRef, years, current, marked, selec
           const next = e.key === 'Home' ? 0 : e.key === 'End' ? total - 1 : Math.max(0, Math.min(total - 1, cursor + (delta ?? 0)))
           setCursor(next)
           onHover(next)
+          e.currentTarget.querySelector<HTMLElement>(`[data-i="${next}"]`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
         } else if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
           onSelect(cursor)

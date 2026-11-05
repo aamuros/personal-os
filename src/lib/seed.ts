@@ -1,5 +1,7 @@
 import { addDays } from './date'
-import type { Goal, Habit, LifeEvent, Reflection, Session, State } from './types'
+import { createAutobiography } from './autobiography'
+import { createAutobiographyEvents } from './autobiography-events'
+import type { Goal, Habit, Reflection, Session, State } from './types'
 
 /** Small deterministic PRNG so the demo history is stable between resets. */
 function createRandom(seed: number) {
@@ -15,9 +17,7 @@ function createRandom(seed: number) {
 export function createSeed(today: string): State {
   const random = createRandom(20261103)
   const year = Number(today.slice(0, 4))
-  const birthYear = 2006
   const birthDate = '2006-03-03'
-  const atAge = (age: number, monthDay: string) => `${birthYear + age}-${monthDay}`
   const ago = (days: number) => addDays(today, -days)
   const ahead = (days: number) => addDays(today, days)
 
@@ -84,7 +84,6 @@ export function createSeed(today: string): State {
       id: 'g-portfolio',
       title: 'Ship portfolio site',
       why: 'Show the work I’m proud of and open doors to the design roles I want.',
-      valueId: 'v-craft',
       start: ago(64),
       due: ahead(40),
       status: 'active',
@@ -100,7 +99,6 @@ export function createSeed(today: string): State {
       id: 'g-thesis',
       title: 'Submit master’s thesis',
       why: 'Close this chapter with work I can stand behind.',
-      valueId: 'v-craft',
       start: ago(200),
       due: ahead(44),
       status: 'active',
@@ -118,7 +116,6 @@ export function createSeed(today: string): State {
       id: 'g-books',
       title: 'Read 24 books this year',
       why: 'Reading widely is how I stay curious and think more clearly.',
-      valueId: 'v-curiosity',
       start: `${year}-01-01`,
       due: `${year}-12-31`,
       status: 'active',
@@ -129,7 +126,6 @@ export function createSeed(today: string): State {
       id: 'g-half',
       title: 'Run a half marathon',
       why: 'Prove to myself that small, consistent efforts add up.',
-      valueId: 'v-health',
       start: ago(95),
       due: ahead(131),
       status: 'active',
@@ -145,7 +141,6 @@ export function createSeed(today: string): State {
       id: 'g-course',
       title: 'Complete design systems course',
       why: 'Build a solid foundation for the work I want to do next.',
-      valueId: 'v-curiosity',
       start: ago(150),
       due: ago(55),
       status: 'completed',
@@ -160,7 +155,6 @@ export function createSeed(today: string): State {
       id: 'g-home',
       title: 'Find a calmer place to live',
       why: 'A quiet home makes it easier to rest and focus.',
-      valueId: 'v-calm',
       start: ago(240),
       due: ago(150),
       status: 'completed',
@@ -261,41 +255,7 @@ export function createSeed(today: string): State {
     ...rest,
   }))
 
-  const events: LifeEvent[] = [
-    { id: 'e-1', date: birthDate, title: 'Born', kind: 'milestone', note: 'Week one on the calendar.' },
-    { id: 'e-2', date: atAge(7, '09-15'), title: 'First piano lesson', kind: 'memory' },
-    {
-      id: 'e-3',
-      date: atAge(12, '07-20'),
-      title: 'Family road trip along the coast',
-      kind: 'memory',
-      note: 'Two weeks, one tent, far too many card games.',
-    },
-    { id: 'e-4', date: atAge(18, '06-28'), title: 'Graduated high school', kind: 'milestone' },
-    {
-      id: 'e-5',
-      date: atAge(18, '09-16'),
-      title: 'Started university',
-      kind: 'milestone',
-      note: 'BA in Interaction Design.',
-    },
-    { id: 'e-6', date: atAge(20, '07-05'), title: 'First design internship', kind: 'achievement' },
-    { id: 'e-7', date: atAge(21, '05-14'), title: 'Moved to the city', kind: 'milestone' },
-    { id: 'e-8', date: atAge(22, '10-08'), title: 'Ran my first 10K', kind: 'achievement' },
-    { id: 'e-9', date: atAge(23, '06-20'), title: 'Graduated with honors', kind: 'achievement' },
-    { id: 'e-10', date: atAge(23, '09-02'), title: 'Started master’s program', kind: 'milestone' },
-    {
-      id: 'e-11',
-      date: atAge(24, '04-12'),
-      title: 'Two weeks in Japan with friends',
-      kind: 'memory',
-      note: 'Kyoto at dawn, before the crowds.',
-    },
-    { id: 'e-12', date: ago(156), title: 'Moved into a new apartment', kind: 'milestone' },
-    { id: 'e-13', date: ago(24), title: 'Ran 10K in under 50 minutes', kind: 'achievement' },
-    { id: 'e-14', date: ahead(44), title: 'Submit thesis', kind: 'milestone' },
-    { id: 'e-15', date: ahead(131), title: 'Half marathon race day', kind: 'milestone' },
-  ]
+  const events = createAutobiographyEvents()
 
   return {
     version: 1,
@@ -308,13 +268,8 @@ export function createSeed(today: string): State {
     ],
     habits,
     goals,
-    values: [
-      { id: 'v-health', name: 'Health', description: 'Energy is the foundation for everything else.' },
-      { id: 'v-connection', name: 'Connection', description: 'Show up fully for the people I love.' },
-      { id: 'v-craft', name: 'Craft', description: 'Do work I’m proud to put my name on.' },
-      { id: 'v-curiosity', name: 'Curiosity', description: 'Keep learning and stay a beginner at something.' },
-      { id: 'v-calm', name: 'Calm', description: 'Leave room to think, rest, and notice.' },
-    ],
+    values: [],
+    seedValuesRemoved: true,
     principles: [
       { id: 'pr-1', text: 'Decide once, then make it automatic.' },
       { id: 'pr-2', text: 'Small steps every day beat big plans.' },
@@ -334,6 +289,8 @@ export function createSeed(today: string): State {
     sessions,
     reflections,
     events,
+    timelineAutobiographyVersion: 1,
+    autobiography: createAutobiography(),
     practices: [
       {
         id: 'pa-1',

@@ -1,0 +1,31 @@
+/* Borderless adaptation of the supplied Tag Input.html, using host tokens. */
+.tag-input {
+  --tag-slab: var(--card);
+  --tag-ink: var(--text);
+  --tag-wash: color-mix(in srgb, var(--tag-ink) 6%, var(--tag-slab));
+  --tag-well: color-mix(in srgb, var(--tag-ink) 12%, var(--tag-slab));
+  position: relative;
+  min-width: 0;
+  width: 100%;
+  color: var(--tag-ink);
+}
+.tag-input .tag-input-field { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 44px; padding: 8px; border: 0; border-radius: 22px; background: var(--tag-wash); cursor: text; transition: background-color 160ms ease; }
+.tag-input .tag-input-field:focus-within { background: var(--tag-well); }
+.tag-input .tag-input-chip { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; height: 30px; padding: 0 4px 0 12px; border: 0; border-radius: 15px; background: var(--tag-ink); color: var(--tag-slab); font-size: 13px; font-weight: 500; animation: tag-input-pop 280ms cubic-bezier(.24, 1.34, .38, 1), tag-input-fade 160ms ease; }
+.tag-input-chip > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag-input .tag-input-chip[data-armed] { background: color-mix(in srgb, #e5484d 14%, var(--tag-slab)); color: #e5484d; }
+.tag-input .tag-input-remove { display: grid; place-items: center; flex: none; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: inherit; opacity: .6; cursor: pointer; }
+.tag-input .tag-input-remove:hover, .tag-input .tag-input-remove:focus-visible { outline: none; box-shadow: none; background: color-mix(in srgb, currentColor 12%, transparent); opacity: 1; }
+.tag-input .tag-input-entry { flex: 1; min-width: 72px; width: 72px; height: 30px; padding: 0 4px; border: 0; border-radius: 0; outline: none; box-shadow: none; background: transparent; color: inherit; font: inherit; font-size: 13px; }
+.tag-input .tag-input-entry:focus-visible { outline: none; box-shadow: none; }
+.tag-input-entry::placeholder { color: color-mix(in srgb, var(--tag-ink) 52%, var(--tag-slab)); }
+.tag-input .tag-input-menu { position: absolute; z-index: 3; top: calc(100% + 6px); right: 0; left: 0; margin: 0; padding: 4px; border: 0; border-radius: 22px; background: var(--tag-slab); list-style: none; animation: tag-input-menu-in 220ms cubic-bezier(.22, 1, .36, 1); }
+.tag-input-menu li { min-height: 30px; padding: 5px 12px; border-radius: 15px; font-size: 13px; overflow-wrap: anywhere; cursor: pointer; }
+.tag-input-menu li[aria-selected="true"] { background: var(--tag-wash); }
+@keyframes tag-input-pop { from { scale: .82; } to { scale: 1; } }
+@keyframes tag-input-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes tag-input-menu-in { from { opacity: 0; translate: 0 -4px; scale: .97; } to { opacity: 1; translate: 0 0; scale: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .tag-input .tag-input-chip, .tag-input .tag-input-menu { animation: none; }
+  .tag-input .tag-input-field { transition: none; }
+}

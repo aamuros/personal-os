@@ -1,0 +1,35 @@
+.autobiography { padding: 28px; border-radius: 20px; background: var(--timeline-slab); box-shadow: 0 0 0 1px var(--timeline-edge); }
+.autobiography-header { padding-bottom: 24px; border-bottom: 1px solid var(--timeline-edge); }
+.autobiography-header h2 { margin: 0 0 8px; font-size: 20px; font-weight: 500; letter-spacing: -.025em; }
+.autobiography-header p { max-width: 62ch; margin: 0; color: var(--timeline-muted); font-size: 13px; line-height: 1.6; }
+.autobiography-layout { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 36px; align-items: start; padding-top: 28px; }
+.autobiography-chapters { display: grid; gap: 4px; }
+.autobiography-chapters button { display: flex; align-items: baseline; gap: 12px; min-height: 44px; padding: 12px; border-radius: 10px; background: none; color: var(--timeline-muted); text-align: left; font-size: 13px; line-height: 1.5; transition: background-color 160ms ease, color 160ms ease; }
+.autobiography-chapters button span { color: var(--timeline-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.autobiography-chapters button:hover:enabled, .autobiography-chapters [aria-current] { color: var(--timeline-ink); background: var(--timeline-wash); }
+.autobiography-chapters button:disabled { opacity: .5; }
+.autobiography-story { min-width: 0; }
+.autobiography-section-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: start; gap: 16px; margin-bottom: 28px; }
+.autobiography-section-heading > div { flex: 1 1 220px; }
+.autobiography-period { margin: 0 0 8px; color: var(--timeline-muted); font-size: 12px; overflow-wrap: anywhere; }
+.autobiography-section-heading h3 { margin: 0; font-size: 24px; font-weight: 500; line-height: 1.25; letter-spacing: -.03em; overflow-wrap: anywhere; }
+.autobiography-prose { max-width: 65ch; animation: timeline-row-in 220ms var(--timeline-ease); }
+.autobiography-prose p { margin: 0 0 22px; color: var(--timeline-soft); line-height: 1.85; white-space: pre-line; overflow-wrap: anywhere; }
+.autobiography-prose p:last-child { margin-bottom: 0; }
+.autobiography-editor { display: grid; gap: 18px; }
+.autobiography-editor label { display: grid; gap: 8px; color: var(--timeline-muted); font-size: 12px; }
+.autobiography-editor textarea.timeline-input { width: 100%; height: auto; min-height: 300px; padding: 12px; resize: vertical; font: inherit; font-size: 14px; line-height: 1.7; }
+.autobiography-editor-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.autobiography-editor button:disabled { opacity: .5; }
+.autobiography-save-status { min-height: 20px; margin: 20px 0 0; color: var(--timeline-muted); font-size: 12px; }
+@container timeline (max-width: 700px) {
+  .autobiography { padding: 20px; }
+  .autobiography-layout { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .autobiography-chapters { display: flex; overflow-x: auto; padding: 4px; margin: -4px; }
+  .autobiography-chapters button { flex: 0 0 180px; }
+  .autobiography-section-heading h3 { font-size: 22px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .autobiography-prose { animation: none; }
+  .autobiography-chapters button { transition: none; }
+}

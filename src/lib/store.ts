@@ -1,7 +1,10 @@
 import { useSyncExternalStore } from 'react'
 import { todayKey } from './date'
 import { createSeed } from './seed'
+import { createAutobiography } from './autobiography'
+import { integrateAutobiographyEvents } from './autobiography-events'
 import type {
+  AutobiographySection,
   Goal,
   LifeArea,
   LifeEvent,
@@ -13,6 +16,13 @@ import type {
 
 const STORAGE_KEY = 'lifeos:v1'
 const PROFILE_SETUP_KEY = 'lifeos:profile-setup:2006-03-03'
+const SEED_VALUES: Record<string, string> = {
+  'v-health': 'Health',
+  'v-connection': 'Connection',
+  'v-craft': 'Craft',
+  'v-curiosity': 'Curiosity',
+  'v-calm': 'Calm',
+}
 
 function load(): State {
   try {
@@ -34,6 +44,38 @@ function load(): State {
             localStorage.setItem(PROFILE_SETUP_KEY, '1')
           } catch {
             /* storage full — preserve the saved dashboard in memory */
+          }
+        }
+        // Add the story once to existing dashboards; keep later edits intact.
+        if (!Array.isArray(parsed.autobiography)) {
+          parsed.autobiography = createAutobiography()
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed))
+          } catch {
+            /* storage unavailable — keep the story in memory */
+          }
+        }
+        if (parsed.timelineAutobiographyVersion !== 1) {
+          parsed.events = integrateAutobiographyEvents(parsed.events)
+          parsed.timelineAutobiographyVersion = 1
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed))
+          } catch {
+            /* storage unavailable — keep the personalized timeline in memory */
+          }
+        }
+        if (!parsed.seedValuesRemoved) {
+          const removed = new Set(parsed.values
+            .filter((value) => SEED_VALUES[value.id] === value.name)
+            .map((value) => value.id))
+          parsed.values = parsed.values.filter((value) => !removed.has(value.id))
+          parsed.goals = parsed.goals.map((goal) => goal.valueId && removed.has(goal.valueId)
+            ? { ...goal, valueId: undefined } : goal)
+          parsed.seedValuesRemoved = true
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed))
+          } catch {
+            /* storage unavailable — keep the cleaned values in memory */
           }
         }
         return parsed
@@ -184,13 +226,15 @@ export const actions = {
   removeValue(id: string) {
     set((s) => ({ values: s.values.filter((v) => v.id !== id), ...reviewed(s) }))
   },
-  moveValue(id: string, delta: -1 | 1) {
+  reorderValue(id: string, index: number) {
     set((s) => {
+      const from = s.values.findIndex((value) => value.id === id)
+      if (from < 0 || !Number.isInteger(index)) return {}
+      const to = Math.max(0, Math.min(index, s.values.length - 1))
+      if (from === to) return {}
       const values = [...s.values]
-      const from = values.findIndex((v) => v.id === id)
-      const to = from + delta
-      if (from < 0 || to < 0 || to >= values.length) return {}
-      ;[values[from], values[to]] = [values[to], values[from]]
+      const [value] = values.splice(from, 1)
+      values.splice(to, 0, value)
       return { values, ...reviewed(s) }
     })
   },
@@ -250,8 +294,16 @@ export const actions = {
   },
 
   // Timeline
+  updateAutobiographySection(id: string, patch: Pick<AutobiographySection, 'title' | 'period' | 'body'>) {
+    set((s) => ({
+      autobiography: s.autobiography.map((section) => section.id === id ? { ...section, ...patch } : section),
+    }))
+  },
   addEvent(input: Omit<LifeEvent, 'id'>) {
     set((s) => ({ events: [...s.events, { ...input, id: uid() }] }))
+  },
+  updateEvent(id: string, input: Omit<LifeEvent, 'id'>) {
+    set((s) => ({ events: s.events.map((event) => event.id === id ? { ...event, ...input } : event) }))
   },
   removeEvent(id: string) {
     set((s) => ({ events: s.events.filter((e) => e.id !== id) }))

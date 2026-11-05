@@ -90,10 +90,19 @@ export type EventKind = 'milestone' | 'memory' | 'achievement'
 
 export interface LifeEvent {
   id: ID
+  /** Start of the known period for sorting; omit the day/month in UI when approximate. */
   date: string
+  datePrecision?: 'year' | 'month'
   title: string
   kind: EventKind
   note?: string
+}
+
+export interface AutobiographySection {
+  id: ID
+  title: string
+  period: string
+  body: string
 }
 
 export interface Practice {
@@ -110,11 +119,14 @@ export interface State {
   habits: Habit[]
   goals: Goal[]
   values: Value[]
+  seedValuesRemoved?: true
   principles: Principle[]
   areas: LifeArea[]
   skills: Skill[]
   sessions: Session[]
   reflections: Reflection[]
   events: LifeEvent[]
+  timelineAutobiographyVersion?: 1
+  autobiography: AutobiographySection[]
   practices: Practice[]
 }

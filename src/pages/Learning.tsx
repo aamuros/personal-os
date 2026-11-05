@@ -93,7 +93,7 @@ export default function Learning() {
         <div className="learning-panel-heading"><h2 id="learning-sessions-title">Recent sessions</h2><span><RollingNumber value={String(sessions.filter((session) => session.date <= today).length)} /> {sessions.filter((session) => session.date <= today).length === 1 ? 'session' : 'sessions'}</span></div>
         <ul className="learning-list">
           {recent.map((session) => <li key={session.id} className="learning-session">
-            <div className="learning-session-content"><p className="learning-session-title" title={session.note || 'Study session'}>{session.note || 'Study session'}</p><p className="learning-session-skill"><i className="learning-dot" style={{ background: color(session.skillId) }} />{skills.find((skill) => skill.id === session.skillId)?.name ?? 'Removed skill'}</p></div>
+            <div className="learning-session-content"><p className="learning-session-title" title={session.note || 'Study session'}>{session.note || 'Study session'}</p><p className="learning-session-skill"><i className="learning-dot" style={{ background: color(session.skillId) }} /><span title={skills.find((skill) => skill.id === session.skillId)?.name ?? 'Removed skill'}>{skills.find((skill) => skill.id === session.skillId)?.name ?? 'Removed skill'}</span></p></div>
             <div className="learning-session-time"><b>{formatMinutes(session.minutes)}</b><span>{relativeDay(session.date, today)}</span></div>
             <button type="button" className="learning-remove" aria-label={`Remove session: ${session.note || 'Study session'}`} onClick={() => actions.removeSession(session.id)}>×</button>
           </li>)}

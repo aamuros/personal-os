@@ -354,7 +354,7 @@ function WheelScale({
             ? "over"
             : "warn"
       }
-      aria-label="Timeline wheel"
+      aria-label="Explore timeline"
     >
       <header className="tw-head">
         <h2>Timeline</h2>
